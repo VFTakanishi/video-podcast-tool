@@ -96,10 +96,6 @@ function shellQuote(value) {
   return `"${value.replace(/"/g, '\\"')}"`;
 }
 
-function toFfmpegListPath(filePath) {
-  return filePath.replace(/\\/g, "/").replace(/'/g, "'\\''");
-}
-
 function runCommand(command, args, options = {}) {
   const label = options.label || path.basename(command);
   return new Promise((resolve, reject) => {
@@ -303,24 +299,21 @@ async function splitMainVideo(config, paths, mainVideoPath, mainDurationSec) {
 async function concatClips(config, paths, clips) {
   const { ffmpegPath } = paths;
   const finalOutput = path.join(paths.outputDir, config.output.fileName);
-  const filterInputs = clips.map((_, index) => `[${index}:v:0][${index}:a:0]`).join("");
-  const filterComplex = `${filterInputs}concat=n=${clips.length}:v=1:a=1[v][a]`;
-  const args = ["-y"];
+  const listPath = path.join(paths.outputDir, "concat-list.txt");
+  const listBody = clips
+    .map((clipPath) => `file '${path.resolve(clipPath).replace(/\\/g, "/").replace(/'/g, "'\\''")}'`)
+    .join("\n");
+  fs.writeFileSync(listPath, `${listBody}\n`, "utf8");
 
-  for (const clipPath of clips) {
-    args.push("-i", clipPath);
-  }
-
-  args.push(
-    "-filter_complex", filterComplex,
-    "-map", "[v]",
-    "-map", "[a]",
-    ...getEncodingArgs(config),
+  await runCommand(ffmpegPath, [
+    "-y",
+    "-f", "concat",
+    "-safe", "0",
+    "-i", listPath,
+    "-c", "copy",
     "-movflags", "+faststart",
     finalOutput
-  );
-
-  await runCommand(ffmpegPath, args, { label: "concat final episode" });
+  ], { label: "concat final episode" });
 
   return finalOutput;
 }
