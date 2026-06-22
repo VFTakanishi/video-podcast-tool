@@ -1,0 +1,38 @@
+{
+  "ffmpegPath": "C:\\Program Files\\Wondershare\\Wondershare UniConverter 16\\ffmpeg.exe",
+  "outputDir": "./build",
+  "video": {
+    "mainVideo": "C:\\path\\to\\main.mp4",
+    "introImage": "C:\\path\\to\\garage_sign_b.png",
+    "jingleImage": "C:\\path\\to\\round_sign.png"
+  },
+  "audio": {
+    "bgm": "C:\\path\\to\\Funky One.mp3",
+    "jingle": "C:\\path\\to\\car_engine_starting.mp3",
+    "jingleGeneratorScript": "C:\\path\\to\\generate_engine_sound.py",
+    "pythonCommand": "python"
+  },
+  "timing": {
+    "introDurationSec": 8,
+    "jingleDurationSec": 4,
+    "insertTimes": [
+      "00:03:13",
+      "00:11:29"
+    ]
+  },
+  "mix": {
+    "introBgmVolume": 1.0,
+    "mainBgmVolume": 0.1,
+    "jingleVolume": 0.4,
+    "introFadeInSec": 2
+  },
+  "output": {
+    "width": 1920,
+    "height": 1080,
+    "videoCodec": "libx264",
+    "audioCodec": "aac",
+    "audioBitrate": "192k",
+    "pixelFormat": "yuv420p",
+    "fileName": "podcast_episode.mp4"
+  }
+}

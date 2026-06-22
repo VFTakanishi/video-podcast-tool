@@ -1,0 +1,11 @@
+{
+  "name": "video-podcast-tool",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build a simple video podcast episode with intro, looping BGM, jingles, and final MP4 output.",
+  "scripts": {
+    "build": "node src/buildPodcast.js --config config.example.json",
+    "start": "node web/server.js",
+    "start:web": "node scripts/startWeb.js"
+  }
+}

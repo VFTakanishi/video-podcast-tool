@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ビデオポッドキャスト作成ツール</title>
+    <style>
+      :root {
+        --bg: #f6efe5;
+        --panel: rgba(255, 252, 248, 0.92);
+        --ink: #1f1b18;
+        --muted: #6f6358;
+        --accent: #cb5f2c;
+        --accent-2: #254f45;
+        --line: rgba(31, 27, 24, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(203, 95, 44, 0.16), transparent 28%),
+          radial-gradient(circle at bottom right, rgba(37, 79, 69, 0.18), transparent 30%),
+          linear-gradient(180deg, #f8f1e9 0%, #f1e4d2 100%);
+        padding: 32px 18px 56px;
+      }
+
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+      }
+
+      .hero {
+        padding: 12px 4px 22px;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+        margin-bottom: 10px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(34px, 6vw, 64px);
+        line-height: 0.95;
+      }
+
+      .lead {
+        max-width: 680px;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.7;
+        margin-top: 16px;
+      }
+
+      .panel {
+        background: var(--panel);
+        backdrop-filter: blur(14px);
+        border: 1px solid var(--line);
+        border-radius: 26px;
+        box-shadow: 0 20px 60px rgba(78, 53, 28, 0.14);
+        overflow: hidden;
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        padding: 24px 24px 10px;
+      }
+
+      .panel-head h2 {
+        margin: 0;
+        font-size: 24px;
+      }
+
+      .status {
+        padding: 9px 14px;
+        border-radius: 999px;
+        background: #f4eadf;
+        color: var(--accent-2);
+        font-size: 13px;
+      }
+
+      form {
+        padding: 10px 24px 24px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .field {
+        background: rgba(255, 255, 255, 0.65);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+      }
+
+      .field label {
+        display: block;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 12px;
+      }
+
+      input[type="file"],
+      input[type="text"] {
+        width: 100%;
+        font: inherit;
+      }
+
+      input[type="text"] {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: white;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 20px;
+      }
+
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 14px 22px;
+        font: inherit;
+        font-weight: 700;
+        background: linear-gradient(135deg, #da6f39 0%, #bb4c22 100%);
+        color: white;
+        cursor: pointer;
+        box-shadow: 0 14px 30px rgba(203, 95, 44, 0.26);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+
+      .note {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .result {
+        margin-top: 24px;
+        padding: 20px 24px 26px;
+        border-top: 1px solid var(--line);
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .result a {
+        color: var(--accent-2);
+        font-weight: 700;
+      }
+
+      .progress-card {
+        margin-top: 14px;
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+      }
+
+      .progress-title {
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 12px;
+        background: #eadfd2;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        width: 18%;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #da6f39 0%, #bb4c22 100%);
+        transition: width 0.3s ease;
+      }
+
+      .progress-note {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+        margin-top: 10px;
+      }
+
+      .preset-list {
+        margin: 14px 24px 0;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+      }
+
+      .preset-item {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .preset-item:last-child {
+        border-bottom: 0;
+      }
+
+      .preset-name {
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .preset-value {
+        color: var(--accent-2);
+        font-size: 14px;
+        word-break: break-word;
+      }
+
+      .preset-meta {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 3px;
+      }
+
+      .time-list {
+        display: grid;
+        gap: 16px;
+      }
+
+      .time-row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+      }
+
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+        color: var(--accent-2);
+        font-weight: 700;
+      }
+
+      .checkbox-row input {
+        width: 18px;
+        height: 18px;
+      }
+
+      .time-row .field {
+        flex: 1;
+        margin: 0;
+      }
+
+      .ghost-button {
+        appearance: none;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 12px 16px;
+        font: inherit;
+        font-weight: 700;
+        background: rgba(255, 255, 255, 0.85);
+        color: var(--accent-2);
+        cursor: pointer;
+        box-shadow: none;
+      }
+
+      .ghost-button.remove {
+        color: #8a3c21;
+      }
+
+      details {
+        margin-top: 16px;
+      }
+
+      summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: var(--accent-2);
+      }
+
+      .video-wrap {
+        margin-top: 18px;
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px;
+      }
+
+      video {
+        width: 100%;
+        border-radius: 12px;
+        background: black;
+      }
+
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #1f1b18;
+        color: #f7efe7;
+        border-radius: 18px;
+        padding: 16px;
+        max-height: 320px;
+        overflow: auto;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      @media (max-width: 760px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .panel-head {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .actions {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="hero">
+        <div class="eyebrow">ブラウザだけで完結</div>
+        <h1>ビデオポッドキャスト作成ツール</h1>
+        <p class="lead">
+          素材を選んでボタンを押すだけで、番組用の動画をブラウザ上で作成できます。
+          カットやジングルのつながりが自然になりやすい、安定重視の作りです。
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>番組を1本作る</h2>
+          <div class="status" id="statusBadge">準備状況を確認中...</div>
+        </div>
+
+        <form id="buildForm">
+          <div class="grid">
+            <div class="field">
+              <label for="mainVideo">本編動画</label>
+              <div class="hint">収録した本編動画を選びます</div>
+              <input id="mainVideo" name="mainVideo" type="file" accept="video/*" required>
+            </div>
+
+            <div class="field">
+              <label for="bgm">BGM音源</label>
+              <div class="hint" id="bgmHint">選ばない場合はデフォルト設定の素材を使います。</div>
+              <input id="bgm" name="bgm" type="file" accept="audio/*">
+            </div>
+
+            <div class="field">
+              <label for="introImage">イントロ画像</label>
+              <div class="hint" id="introHint">選ばない場合はデフォルト設定の素材を使います。</div>
+              <input id="introImage" name="introImage" type="file" accept="image/*">
+            </div>
+
+            <div class="field">
+              <label for="jingleImage">ジングル画像</label>
+              <div class="hint" id="jingleImageHint">選ばない場合はデフォルト設定の素材を使います。</div>
+              <input id="jingleImage" name="jingleImage" type="file" accept="image/*">
+            </div>
+
+            <div class="field">
+              <label for="jingle">ジングル音源</label>
+              <div class="hint" id="jingleHint">選ばない場合はデフォルト設定の素材を使います。</div>
+              <input id="jingle" name="jingle" type="file" accept="audio/*">
+            </div>
+
+            <div class="field">
+              <label for="outputName">出力ファイル名</label>
+              <div class="hint">完成するMP4の名前です</div>
+              <input id="outputName" name="outputName" type="text" value="podcast_episode.mp4">
+            </div>
+
+            <div class="field" style="grid-column: 1 / -1;">
+              <label>ジングル位置</label>
+              <div class="hint">最初は2個入っています。必要なら追加できます。使わない回はジングルなしにもできます。</div>
+              <label class="checkbox-row">
+                <input id="disableJingles" type="checkbox">
+                <span>今回はジングルを使わない</span>
+              </label>
+              <div class="time-list" id="insertTimesList"></div>
+              <div class="actions" style="margin-top: 14px;">
+                <button class="ghost-button" id="addInsertTimeButton" type="button">ジングル位置を追加</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="buildButton" type="submit">MP4を作成する</button>
+            <div class="note">安定重視のため少し時間はかかりますが、切り替わりや音のつながりは自然になりやすいです。</div>
+          </div>
+        </form>
+
+        <div class="result hidden" id="result">
+          <p id="resultMessage"></p>
+          <p id="resultLinkWrap" class="hidden">
+            <a id="resultLink" href="#" target="_blank" rel="noopener">完成した動画を開く</a>
+          </p>
+
+          <div id="progressWrap" class="progress-card hidden">
+            <div class="progress-title" id="progressTitle">動画を作成中です...</div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-note" id="progressNote">
+              このまま画面を開いたままお待ちください。長めの動画は数分かかることがあります。
+            </div>
+          </div>
+
+          <div id="previewWrap" class="video-wrap hidden">
+            <video id="previewVideo" controls playsinline></video>
+          </div>
+
+          <details>
+            <summary>詳細を表示する</summary>
+            <pre id="logBox"></pre>
+          </details>
+        </div>
+      </section>
+
+      <section class="panel" style="margin-top: 22px;">
+        <div class="panel-head">
+          <h2>デフォルト素材</h2>
+          <div class="status" id="presetBadge">設定内容を表示中</div>
+        </div>
+
+        <div class="preset-list">
+          <div class="preset-item">
+            <div class="preset-name">現在のBGM</div>
+            <div class="preset-value" id="currentBgm">未設定</div>
+            <div class="preset-meta" id="currentBgmMeta"></div>
+          </div>
+          <div class="preset-item">
+            <div class="preset-name">現在のジングル音源</div>
+            <div class="preset-value" id="currentJingle">未設定</div>
+            <div class="preset-meta" id="currentJingleMeta"></div>
+          </div>
+          <div class="preset-item">
+            <div class="preset-name">現在のイントロ画像</div>
+            <div class="preset-value" id="currentIntro">未設定</div>
+            <div class="preset-meta" id="currentIntroMeta"></div>
+          </div>
+          <div class="preset-item">
+            <div class="preset-name">現在のジングル画像</div>
+            <div class="preset-value" id="currentJingleImage">未設定</div>
+            <div class="preset-meta" id="currentJingleImageMeta"></div>
+          </div>
+        </div>
+
+        <form id="presetForm">
+          <div class="grid">
+            <div class="field">
+              <label for="presetBgm">デフォルトBGM</label>
+              <div class="hint">上でBGMを選ばなかったときに自動で使う音源です。</div>
+              <input id="presetBgm" name="bgm" type="file" accept="audio/*">
+            </div>
+
+            <div class="field">
+              <label for="presetJingle">デフォルトのジングル音源</label>
+              <div class="hint">上でジングル音源を選ばなかったときに自動で使う素材です。</div>
+              <input id="presetJingle" name="jingle" type="file" accept="audio/*">
+            </div>
+
+            <div class="field">
+              <label for="presetIntroImage">デフォルトのイントロ画像</label>
+              <div class="hint">上でイントロ画像を選ばなかったときに自動で使う画像です。</div>
+              <input id="presetIntroImage" name="introImage" type="file" accept="image/*">
+            </div>
+
+            <div class="field">
+              <label for="presetJingleImage">デフォルトのジングル画像</label>
+              <div class="hint">上でジングル画像を選ばなかったときに自動で使う画像です。</div>
+              <input id="presetJingleImage" name="jingleImage" type="file" accept="image/*">
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="presetButton" type="submit">デフォルト素材を保存する</button>
+            <div class="note" id="presetNote">差し替えたい素材だけ選んで保存できます。</div>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <script>
+      const statusBadge = document.getElementById("statusBadge");
+      const form = document.getElementById("buildForm");
+      const buildButton = document.getElementById("buildButton");
+      const result = document.getElementById("result");
+      const resultMessage = document.getElementById("resultMessage");
+      const resultLinkWrap = document.getElementById("resultLinkWrap");
+      const resultLink = document.getElementById("resultLink");
+      const previewWrap = document.getElementById("previewWrap");
+      const previewVideo = document.getElementById("previewVideo");
+      const logBox = document.getElementById("logBox");
+      const progressWrap = document.getElementById("progressWrap");
+      const progressTitle = document.getElementById("progressTitle");
+      const progressFill = document.getElementById("progressFill");
+      const progressNote = document.getElementById("progressNote");
+      const presetForm = document.getElementById("presetForm");
+      const presetButton = document.getElementById("presetButton");
+      const presetBadge = document.getElementById("presetBadge");
+      const presetNote = document.getElementById("presetNote");
+      const bgmHint = document.getElementById("bgmHint");
+      const introHint = document.getElementById("introHint");
+      const jingleImageHint = document.getElementById("jingleImageHint");
+      const jingleHint = document.getElementById("jingleHint");
+      const currentBgm = document.getElementById("currentBgm");
+      const currentBgmMeta = document.getElementById("currentBgmMeta");
+      const currentJingle = document.getElementById("currentJingle");
+      const currentJingleMeta = document.getElementById("currentJingleMeta");
+      const currentIntro = document.getElementById("currentIntro");
+      const currentIntroMeta = document.getElementById("currentIntroMeta");
+      const currentJingleImage = document.getElementById("currentJingleImage");
+      const currentJingleImageMeta = document.getElementById("currentJingleImageMeta");
+      const disableJingles = document.getElementById("disableJingles");
+      const insertTimesList = document.getElementById("insertTimesList");
+      const addInsertTimeButton = document.getElementById("addInsertTimeButton");
+      let activeJobId = "";
+      let pollTimer = null;
+      let insertTimeCount = 0;
+
+      function createInsertTimeRow(value = "") {
+        insertTimeCount += 1;
+        const row = document.createElement("div");
+        row.className = "time-row";
+        row.dataset.index = String(insertTimeCount);
+
+        const field = document.createElement("div");
+        field.className = "field";
+
+        const label = document.createElement("label");
+        label.textContent = `ジングル位置 ${insertTimeCount}`;
+
+        const hint = document.createElement("div");
+        hint.className = "hint";
+        hint.textContent = "例: 00:03:13";
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = value;
+        input.placeholder = "00:03:13";
+        input.className = "insert-time-input";
+
+        field.appendChild(label);
+        field.appendChild(hint);
+        field.appendChild(input);
+        row.appendChild(field);
+
+        if (insertTimesList.children.length >= 2) {
+          const removeButton = document.createElement("button");
+          removeButton.type = "button";
+          removeButton.className = "ghost-button remove";
+          removeButton.textContent = "削除";
+          removeButton.addEventListener("click", () => {
+            row.remove();
+            renumberInsertTimeRows();
+          });
+          row.appendChild(removeButton);
+        }
+
+        insertTimesList.appendChild(row);
+        renumberInsertTimeRows();
+      }
+
+      function renumberInsertTimeRows() {
+        const rows = Array.from(insertTimesList.querySelectorAll(".time-row"));
+        rows.forEach((row, index) => {
+          const label = row.querySelector("label");
+          if (label) {
+            label.textContent = `ジングル位置 ${index + 1}`;
+          }
+
+          const removeButton = row.querySelector(".ghost-button.remove");
+          if (removeButton) {
+            removeButton.disabled = rows.length <= 2;
+            removeButton.style.opacity = rows.length <= 2 ? "0.5" : "1";
+            removeButton.style.cursor = rows.length <= 2 ? "not-allowed" : "pointer";
+          }
+        });
+      }
+
+      function getInsertTimes() {
+        return Array.from(document.querySelectorAll(".insert-time-input"))
+          .map((input) => input.value.trim())
+          .filter(Boolean);
+      }
+
+      function syncJingleInputsState() {
+        const disabled = disableJingles.checked;
+        const inputs = Array.from(document.querySelectorAll(".insert-time-input"));
+        const removeButtons = Array.from(document.querySelectorAll(".ghost-button.remove"));
+
+        inputs.forEach((input) => {
+          input.disabled = disabled;
+        });
+        removeButtons.forEach((button) => {
+          button.disabled = disabled;
+          button.style.opacity = disabled ? "0.5" : "1";
+          button.style.cursor = disabled ? "not-allowed" : "pointer";
+        });
+        addInsertTimeButton.disabled = disabled;
+        addInsertTimeButton.style.opacity = disabled ? "0.5" : "1";
+        addInsertTimeButton.style.cursor = disabled ? "not-allowed" : "pointer";
+      }
+
+      function formatPresetMeta(value) {
+        if (!value || !value.updatedAt) {
+          return value && value.available ? "保存済み" : "";
+        }
+
+        const date = new Date(value.updatedAt);
+        if (Number.isNaN(date.getTime())) {
+          return "保存済み";
+        }
+
+        return `保存日時: ${date.toLocaleString("ja-JP")}`;
+      }
+
+      function applyCurrentPreset(element, metaElement, value) {
+        if (!element || !metaElement) return;
+        if (value && value.available) {
+          element.textContent = value.displayName || value.fileName || "保存済み";
+          metaElement.textContent = formatPresetMeta(value);
+          return;
+        }
+        element.textContent = "未設定";
+        metaElement.textContent = "";
+      }
+
+      function applyDefaultHints(defaults) {
+        const setHint = (element, value, fallback) => {
+          if (!element) return;
+          if (value && value.available) {
+            const name = value.displayName || value.fileName;
+            element.textContent = `現在の設定: ${name}。変更したいときだけ別のファイルを選んでください。`;
+            return;
+          }
+          element.textContent = fallback;
+        };
+
+        setHint(bgmHint, defaults?.bgm, "デフォルトBGMが未設定です。ここでファイルを選んでください。");
+        setHint(introHint, defaults?.introImage, "デフォルトのイントロ画像が未設定です。ここでファイルを選んでください。");
+        setHint(jingleImageHint, defaults?.jingleImage, "デフォルトのジングル画像が未設定です。ここでファイルを選んでください。");
+        setHint(jingleHint, defaults?.jingle, "デフォルトのジングル音源が未設定です。ここでファイルを選んでください。");
+        applyCurrentPreset(currentBgm, currentBgmMeta, defaults?.bgm);
+        applyCurrentPreset(currentJingle, currentJingleMeta, defaults?.jingle);
+        applyCurrentPreset(currentIntro, currentIntroMeta, defaults?.introImage);
+        applyCurrentPreset(currentJingleImage, currentJingleImageMeta, defaults?.jingleImage);
+        const presetNames = [
+          defaults?.bgm?.displayName,
+          defaults?.jingle?.displayName,
+          defaults?.introImage?.displayName,
+          defaults?.jingleImage?.displayName
+        ].filter(Boolean);
+        presetBadge.textContent = presetNames.length ? "設定済み" : "未設定";
+      }
+
+      async function loadStatus() {
+        try {
+          const response = await fetch("/api/status");
+          const data = await response.json();
+          statusBadge.textContent = data.ffmpegFound ? "準備できました" : "動画変換ソフトが見つかりません";
+          applyDefaultHints(data.defaults || {});
+        } catch (error) {
+          statusBadge.textContent = "状態を確認できません";
+          applyDefaultHints({});
+        }
+      }
+
+      function stopPolling() {
+        if (pollTimer) {
+          clearTimeout(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      function estimateStage(logText) {
+        const log = logText || "";
+        if (log.includes("[run] concat final episode")) {
+          return { title: "最後の1本にまとめています...", percent: 92 };
+        }
+        if (log.includes("[run] split segment 3")) {
+          return { title: "本編を分割しています...", percent: 82 };
+        }
+        if (log.includes("[run] split segment 2")) {
+          return { title: "本編を分割しています...", percent: 74 };
+        }
+        if (log.includes("[run] split segment 1")) {
+          return { title: "本編を分割しています...", percent: 66 };
+        }
+        if (log.includes("[run] create jingle clip")) {
+          return { title: "ジングル動画を作っています...", percent: 58 };
+        }
+        if (log.includes("[run] mix bgm into main video")) {
+          return { title: "本編にBGMを重ねています...", percent: 38 };
+        }
+        if (log.includes("[run] create intro")) {
+          return { title: "イントロ動画を作っています...", percent: 18 };
+        }
+        if (log.includes("[run] probe main-video.mp4")) {
+          return { title: "本編動画を確認しています...", percent: 8 };
+        }
+        return { title: "作成の準備をしています...", percent: 4 };
+      }
+
+      async function pollBuild(jobId) {
+        try {
+          const response = await fetch(`/api/build-status?id=${encodeURIComponent(jobId)}`);
+          const data = await response.json();
+
+          if (!response.ok || !data.ok) {
+            throw new Error(data.error || "進行状況を取得できませんでした。");
+          }
+
+          resultMessage.textContent = data.message || "作成中です...";
+          logBox.textContent = data.log || "作成中です...";
+          const stage = estimateStage(data.log || "");
+          progressWrap.classList.remove("hidden");
+          progressTitle.textContent = stage.title;
+          progressFill.style.width = `${stage.percent}%`;
+          progressNote.textContent = "このまま画面を開いたままお待ちください。長めの動画は数分かかることがあります。";
+
+          if (data.status === "done") {
+            stopPolling();
+            buildButton.disabled = false;
+            buildButton.textContent = "MP4を作成する";
+            resultMessage.textContent = `${data.message} Saved to: ${data.outputPath}`;
+            progressTitle.textContent = "完成しました";
+            progressFill.style.width = "100%";
+            progressNote.textContent = "MP4の作成が完了しました。";
+            resultLink.href = data.videoUrl;
+            resultLinkWrap.classList.remove("hidden");
+            previewVideo.src = data.videoUrl;
+            previewWrap.classList.remove("hidden");
+            return;
+          }
+
+          if (data.status === "failed") {
+            stopPolling();
+            buildButton.disabled = false;
+            buildButton.textContent = "MP4を作成する";
+            resultMessage.textContent = data.message || "作成に失敗しました。";
+            progressTitle.textContent = "停止しました";
+            progressNote.textContent = "どこで止まったか確認したい場合は、詳細を開いてください。";
+            return;
+          }
+
+          pollTimer = setTimeout(() => pollBuild(jobId), 2000);
+        } catch (error) {
+          stopPolling();
+          buildButton.disabled = false;
+          buildButton.textContent = "MP4を作成する";
+          resultMessage.textContent = error.message;
+        }
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const formData = new FormData(form);
+        if (disableJingles.checked) {
+          formData.append("noJingles", "1");
+        }
+        formData.append("insertTimesJson", JSON.stringify(getInsertTimes()));
+        stopPolling();
+        buildButton.disabled = true;
+        buildButton.textContent = "作成中...";
+        result.classList.remove("hidden");
+        resultLinkWrap.classList.add("hidden");
+        previewWrap.classList.add("hidden");
+        progressWrap.classList.remove("hidden");
+        previewVideo.removeAttribute("src");
+        previewVideo.load();
+        resultMessage.textContent = "作成を開始しました。このまま画面を開いたままお待ちください。";
+        logBox.textContent = "作成の準備をしています...";
+        progressTitle.textContent = "作成の準備をしています...";
+        progressFill.style.width = "4%";
+        progressNote.textContent = "20分前後の動画は少し時間がかかることがあります。";
+
+        try {
+          const response = await fetch("/api/build", {
+            method: "POST",
+            body: formData
+          });
+          const data = await response.json();
+
+          if (!response.ok || !data.ok) {
+            const error = new Error(data.error || "作成に失敗しました。");
+            error.detailLog = data.log || "";
+            throw error;
+          }
+
+          activeJobId = data.jobId;
+          resultMessage.textContent = data.message || "作成を開始しました。";
+          logBox.textContent = "作成中です...";
+          pollBuild(activeJobId);
+        } catch (error) {
+          resultMessage.textContent = error.message;
+          logBox.textContent = error.detailLog || "作成に失敗しました。";
+          buildButton.disabled = false;
+          buildButton.textContent = "MP4を作成する";
+        }
+      });
+
+      presetForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const presetData = new FormData(presetForm);
+        presetButton.disabled = true;
+        presetButton.textContent = "保存中...";
+        presetNote.textContent = "デフォルト素材を保存しています...";
+
+        try {
+          const response = await fetch("/api/default-assets", {
+            method: "POST",
+            body: presetData
+          });
+          const data = await response.json();
+
+          if (!response.ok || !data.ok) {
+            throw new Error(data.error || "デフォルト素材を保存できませんでした。");
+          }
+
+          applyDefaultHints(data.defaults || {});
+          presetForm.reset();
+          presetNote.textContent = data.updated.length
+            ? `保存しました。更新された項目: ${data.updated.join(", ")}`
+            : "変更はありませんでした。";
+        } catch (error) {
+          presetNote.textContent = error.message;
+        } finally {
+          presetButton.disabled = false;
+          presetButton.textContent = "デフォルト素材を保存する";
+        }
+      });
+
+      addInsertTimeButton.addEventListener("click", () => {
+        createInsertTimeRow("");
+      });
+
+      disableJingles.addEventListener("change", () => {
+        syncJingleInputsState();
+      });
+
+      createInsertTimeRow("00:03:13");
+      createInsertTimeRow("00:11:29");
+      syncJingleInputsState();
+      loadStatus();
+    </script>
+  </body>
+  </html>
