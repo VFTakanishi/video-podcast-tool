@@ -131,14 +131,34 @@ function runCommand(command, args, options = {}) {
     });
 
     child.on("error", reject);
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       if (code === 0 || options.acceptNonZeroExit) {
-        resolve({ code, stdout, stderr });
+        resolve({ code, signal, stdout, stderr });
+        return;
+      }
+      if (signal) {
+        reject(new Error(`${label} was stopped by signal ${signal}`));
         return;
       }
       reject(new Error(`${label} failed with exit code ${code}`));
     });
   });
+}
+
+function getEncodingArgs(config) {
+  const preset = config.output.videoPreset || "veryfast";
+  const threads = String(config.output.videoThreads || 2);
+  return [
+    "-c:v", config.output.videoCodec,
+    "-preset", preset,
+    "-threads", threads,
+    "-c:a", config.output.audioCodec,
+    "-b:a", config.output.audioBitrate,
+    "-pix_fmt", config.output.pixelFormat,
+    "-r", "30",
+    "-ar", "48000",
+    "-ac", "2"
+  ];
 }
 
 async function probeDurationSeconds(ffmpegPath, inputFile) {
@@ -195,13 +215,7 @@ async function createIntro(config, paths) {
     "-map", "0:v:0",
     "-map", "[a]",
     "-vf", scalePad,
-    "-c:v", config.output.videoCodec,
-    "-c:a", config.output.audioCodec,
-    "-b:a", config.output.audioBitrate,
-    "-pix_fmt", config.output.pixelFormat,
-    "-r", "30",
-    "-ar", "48000",
-    "-ac", "2",
+    ...getEncodingArgs(config),
     "-shortest",
     output
   ], { label: "create intro" });
@@ -222,13 +236,7 @@ async function createMainWithBgm(config, paths) {
     `[0:a]aformat=sample_rates=48000:channel_layouts=stereo[main];[1:a]volume=${config.mix.mainBgmVolume},aformat=sample_rates=48000:channel_layouts=stereo[bgm];[main][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]`,
     "-map", "0:v:0",
     "-map", "[aout]",
-    "-c:v", config.output.videoCodec,
-    "-c:a", config.output.audioCodec,
-    "-b:a", config.output.audioBitrate,
-    "-pix_fmt", config.output.pixelFormat,
-    "-r", "30",
-    "-ar", "48000",
-    "-ac", "2",
+    ...getEncodingArgs(config),
     "-shortest",
     output
   ], { label: "mix bgm into main video" });
@@ -252,13 +260,7 @@ async function createJingle(config, paths) {
     "-map", "0:v:0",
     "-map", "[a]",
     "-vf", scalePad,
-    "-c:v", config.output.videoCodec,
-    "-c:a", config.output.audioCodec,
-    "-b:a", config.output.audioBitrate,
-    "-pix_fmt", config.output.pixelFormat,
-    "-r", "30",
-    "-ar", "48000",
-    "-ac", "2",
+    ...getEncodingArgs(config),
     "-shortest",
     output
   ], { label: "create jingle clip" });
@@ -288,13 +290,7 @@ async function splitMainVideo(config, paths, mainVideoPath, mainDurationSec) {
       "-i", mainVideoPath,
       "-ss", secondsToTimestamp(start),
       "-t", secondsToTimestamp(duration),
-      "-c:v", config.output.videoCodec,
-      "-c:a", config.output.audioCodec,
-      "-b:a", config.output.audioBitrate,
-      "-pix_fmt", config.output.pixelFormat,
-      "-r", "30",
-      "-ar", "48000",
-      "-ac", "2",
+      ...getEncodingArgs(config),
       outFile
     ], { label: `split segment ${i + 1}` });
   }
@@ -317,13 +313,7 @@ async function concatClips(config, paths, clips) {
     "-filter_complex", filterComplex,
     "-map", "[v]",
     "-map", "[a]",
-    "-c:v", config.output.videoCodec,
-    "-c:a", config.output.audioCodec,
-    "-b:a", config.output.audioBitrate,
-    "-pix_fmt", config.output.pixelFormat,
-    "-r", "30",
-    "-ar", "48000",
-    "-ac", "2",
+    ...getEncodingArgs(config),
     "-movflags", "+faststart",
     finalOutput
   );

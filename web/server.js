@@ -305,6 +305,8 @@ function buildConfig(sessionDir, uploadDir, fields, files, ffmpegPath) {
       width: 1920,
       height: 1080,
       videoCodec: "libx264",
+      videoPreset: "veryfast",
+      videoThreads: 2,
       audioCodec: "aac",
       audioBitrate: "192k",
       pixelFormat: "yuv420p",
