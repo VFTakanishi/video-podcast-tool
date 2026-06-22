@@ -226,6 +226,7 @@ async function createIntro(config, paths) {
 async function createMainWithBgm(config, paths) {
   const { ffmpegPath } = paths;
   const output = path.join(paths.outputDir, "02_main_with_bgm.mp4");
+  const scalePad = buildScalePadFilter(config.output.width, config.output.height);
 
   await runCommand(ffmpegPath, [
     "-y",
@@ -236,6 +237,7 @@ async function createMainWithBgm(config, paths) {
     `[0:a]aformat=sample_rates=48000:channel_layouts=stereo[main];[1:a]volume=${config.mix.mainBgmVolume},aformat=sample_rates=48000:channel_layouts=stereo[bgm];[main][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]`,
     "-map", "0:v:0",
     "-map", "[aout]",
+    "-vf", scalePad,
     ...getEncodingArgs(config),
     "-shortest",
     output
