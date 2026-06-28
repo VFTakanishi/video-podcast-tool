@@ -332,6 +332,7 @@ async function ensureFfmpeg() {
   const [{ FFmpeg }, { toBlobURL }] = await loadFfmpegLib();
   const ffmpeg = new FFmpeg();
   const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
+  const workerBaseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm";
   let currentStage = { title: "準備中", start: 0, end: 0, note: "" };
 
   ffmpeg.on("log", ({ message }) => {
@@ -348,7 +349,8 @@ async function ensureFfmpeg() {
 
   await ffmpeg.load({
     coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm")
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+    workerURL: await toBlobURL(`${workerBaseURL}/worker.js`, "text/javascript")
   });
 
   ffmpegState = {
