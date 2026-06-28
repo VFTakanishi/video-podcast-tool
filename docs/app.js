@@ -350,7 +350,7 @@ async function ensureFfmpeg() {
   await ffmpeg.load({
     coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
     wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-    workerURL: await toBlobURL(`${workerBaseURL}/worker.js`, "text/javascript")
+    classWorkerURL: await toBlobURL(`${workerBaseURL}/worker.js`, "text/javascript")
   });
 
   ffmpegState = {
