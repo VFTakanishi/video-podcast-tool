@@ -323,6 +323,7 @@ async function main() {
   const configArg = args.config || "config.json";
   const loaded = loadConfig(configArg);
   const config = loaded.data;
+  const useJingles = Array.isArray(config.timing.insertTimes) && config.timing.insertTimes.length > 0;
 
   config.ffmpegPath = resolvePath(loaded.dir, config.ffmpegPath);
   config.outputDir = resolvePath(loaded.dir, config.outputDir || "./build");
@@ -336,17 +337,20 @@ async function main() {
   ensureFile(config.ffmpegPath, "ffmpeg");
   ensureFile(config.video.mainVideo, "Main video");
   ensureFile(config.video.introImage, "Intro image");
-  ensureFile(config.video.jingleImage, "Jingle image");
   ensureFile(config.audio.bgm, "BGM audio");
+  if (useJingles) {
+    ensureFile(config.video.jingleImage, "Jingle image");
+  }
   mkdirp(config.outputDir);
 
-  await ensureJingleAudio(config);
+  if (useJingles) {
+    await ensureJingleAudio(config);
+  }
 
   const paths = {
     ffmpegPath: config.ffmpegPath,
     outputDir: config.outputDir
   };
-  const useJingles = Array.isArray(config.timing.insertTimes) && config.timing.insertTimes.length > 0;
 
   const mainDurationSec = await probeDurationSeconds(config.ffmpegPath, config.video.mainVideo);
   const introPath = await createIntro(config, paths);

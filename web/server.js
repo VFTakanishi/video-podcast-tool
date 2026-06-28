@@ -16,6 +16,9 @@ const BUILD_ROOT = path.join(DATA_ROOT, "build-web");
 const BUILD_SCRIPT = path.join(ROOT, "src", "buildPodcast.js");
 const DEFAULT_ASSET_DIR = path.join(DATA_ROOT, "default-assets");
 const DEFAULT_ASSET_META_PATH = path.join(DEFAULT_ASSET_DIR, "defaults.json");
+const BUILD_RETENTION_MS = 12 * 60 * 60 * 1000;
+const JOB_RETENTION_MS = 24 * 60 * 60 * 1000;
+const MAX_BUILD_SESSIONS = 8;
 const DEFAULT_FFMPEG_PATHS = [
   "/usr/bin/ffmpeg",
   "/usr/local/bin/ffmpeg",
@@ -36,6 +39,62 @@ const DEFAULT_ASSET_SLOTS = {
   jingleImage: "jingle-image"
 };
 const jobs = new Map();
+
+function removeDirectoryIfExists(targetPath) {
+  if (fs.existsSync(targetPath)) {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+  }
+}
+
+function pruneOldJobs() {
+  const cutoff = Date.now() - JOB_RETENTION_MS;
+  for (const [jobId, job] of jobs.entries()) {
+    if ((job.createdAt || 0) < cutoff) {
+      jobs.delete(jobId);
+    }
+  }
+}
+
+function pruneOldBuildSessions() {
+  if (!fs.existsSync(BUILD_ROOT)) {
+    return;
+  }
+
+  const sessionDirs = fs.readdirSync(BUILD_ROOT, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const fullPath = path.join(BUILD_ROOT, entry.name);
+      const stat = fs.statSync(fullPath);
+      return {
+        fullPath,
+        modifiedAt: stat.mtimeMs
+      };
+    })
+    .sort((a, b) => b.modifiedAt - a.modifiedAt);
+
+  const cutoff = Date.now() - BUILD_RETENTION_MS;
+  for (const session of sessionDirs) {
+    if (session.modifiedAt < cutoff) {
+      removeDirectoryIfExists(session.fullPath);
+    }
+  }
+
+  const remaining = fs.readdirSync(BUILD_ROOT, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const fullPath = path.join(BUILD_ROOT, entry.name);
+      const stat = fs.statSync(fullPath);
+      return {
+        fullPath,
+        modifiedAt: stat.mtimeMs
+      };
+    })
+    .sort((a, b) => b.modifiedAt - a.modifiedAt);
+
+  for (const session of remaining.slice(MAX_BUILD_SESSIONS)) {
+    removeDirectoryIfExists(session.fullPath);
+  }
+}
 
 function findFfmpeg() {
   if (process.env.PODCAST_FFMPEG_PATH && fs.existsSync(process.env.PODCAST_FFMPEG_PATH)) {
@@ -387,10 +446,15 @@ function startBuildJob(job, configPath, workingDirectory, config, sessionId) {
     appendJobLog(job, `\n${error.message}\n`);
   });
 
-  child.on("close", (code) => {
+  child.on("close", (code, signal) => {
     if (code !== 0) {
       job.status = "failed";
       job.message = "作成に失敗しました。詳細を確認してください。";
+      if (signal) {
+        appendJobLog(job, `\nBuild process stopped by signal: ${signal}\n`);
+      } else {
+        appendJobLog(job, `\nBuild process exited with code: ${code}\n`);
+      }
       return;
     }
 
@@ -447,6 +511,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "POST" && url.pathname === "/api/build") {
+      pruneOldJobs();
+      pruneOldBuildSessions();
+
       const ffmpegPath = findFfmpeg();
       if (!ffmpegPath) {
         sendJson(res, 500, { ok: false, error: "このPCで動画変換ソフトが見つかりませんでした。" });
@@ -550,6 +617,9 @@ const server = http.createServer(async (req, res) => {
     });
   }
 });
+
+pruneOldJobs();
+pruneOldBuildSessions();
 
 server.listen(PORT, HOST, () => {
   console.log(`Video Podcast Builder running at http://${HOST}:${PORT}`);
