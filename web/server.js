@@ -312,6 +312,7 @@ function resolveAssetPath(folder, slotName, uploadItem, defaultPath) {
 }
 
 function buildConfig(sessionDir, uploadDir, fields, files, ffmpegPath) {
+  const useCompactOutput = process.platform !== "win32" || Boolean(process.env.RAILWAY_PROJECT_ID);
   const outputName = (fields.outputName || "podcast_episode.mp4").trim() || "podcast_episode.mp4";
   let insertTimes = [
     (fields.insert1 || "00:03:13").trim(),
@@ -361,13 +362,13 @@ function buildConfig(sessionDir, uploadDir, fields, files, ffmpegPath) {
       introFadeInSec: 2
     },
     output: {
-      width: 1920,
-      height: 1080,
+      width: useCompactOutput ? 1280 : 1920,
+      height: useCompactOutput ? 720 : 1080,
       videoCodec: "libx264",
-      videoPreset: "veryfast",
-      videoThreads: 2,
+      videoPreset: useCompactOutput ? "ultrafast" : "veryfast",
+      videoThreads: useCompactOutput ? 1 : 2,
       audioCodec: "aac",
-      audioBitrate: "192k",
+      audioBitrate: useCompactOutput ? "128k" : "192k",
       pixelFormat: "yuv420p",
       fileName: outputName
     }

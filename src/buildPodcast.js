@@ -355,7 +355,9 @@ async function main() {
   const mainDurationSec = await probeDurationSeconds(config.ffmpegPath, config.video.mainVideo);
   const introPath = await createIntro(config, paths);
   const mainWithBgmPath = await createMainWithBgm(config, paths);
-  const segments = await splitMainVideo(config, paths, mainWithBgmPath, mainDurationSec);
+  const segments = useJingles
+    ? await splitMainVideo(config, paths, mainWithBgmPath, mainDurationSec)
+    : [mainWithBgmPath];
   const jinglePath = useJingles ? await createJingle(config, paths) : "";
 
   const orderedClips = [];
