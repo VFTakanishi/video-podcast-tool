@@ -424,6 +424,23 @@ function appendJobLog(job, text) {
   }
 }
 
+function inferFailureMessage(logText, signal, code) {
+  const log = String(logText || "");
+  if (signal === "SIGKILL" || log.includes("SIGKILL") || log.includes("Killed")) {
+    return "作成中にサーバー負荷で停止しました。短い動画にするか、ジングルを減らして試してください。";
+  }
+  if (log.includes("Split points must be inside the main video duration")) {
+    return "ジングル位置が動画の長さを超えています。ジングル位置を見直してください。";
+  }
+  if (log.includes("not found")) {
+    return "必要な素材が見つかりませんでした。動画、BGM、画像の設定を確認してください。";
+  }
+  if (typeof code === "number" && code !== 0) {
+    return `作成に失敗しました。処理コード: ${code}`;
+  }
+  return "作成に失敗しました。下の詳細ログを確認してください。";
+}
+
 function startBuildJob(job, configPath, workingDirectory, config, sessionId) {
   job.status = "running";
   job.message = "動画を作成しています。長めの動画は数分かかることがあります。";
@@ -450,12 +467,12 @@ function startBuildJob(job, configPath, workingDirectory, config, sessionId) {
   child.on("close", (code, signal) => {
     if (code !== 0) {
       job.status = "failed";
-      job.message = "作成に失敗しました。詳細を確認してください。";
       if (signal) {
         appendJobLog(job, `\nBuild process stopped by signal: ${signal}\n`);
       } else {
         appendJobLog(job, `\nBuild process exited with code: ${code}\n`);
       }
+      job.message = inferFailureMessage(job.log, signal, code);
       return;
     }
 

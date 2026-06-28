@@ -69,3 +69,20 @@ For this app, a container host is a better fit than a static host because it nee
 - If you do not choose files in the form, saved default assets are used.
 - If you enable `no jingles`, the episode is built without jingle inserts.
 - Large uploads and long videos need a host with enough CPU, disk, and request limits.
+
+## Free public version
+
+If you want a zero-cost shareable URL, use the browser-only version in `docs/`.
+
+What it does:
+
+- runs entirely in the user's browser
+- stores default assets in that browser
+- does not need Railway
+- is suitable for GitHub Pages
+
+Trade-offs:
+
+- PC recommended
+- processing can take time for long videos
+- output is lighter than the server version

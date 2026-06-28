@@ -739,6 +739,19 @@
         return { title: "作成の準備をしています...", percent: 4 };
       }
 
+      function buildFailureSummary(logText) {
+        const log = String(logText || "");
+        if (!log) {
+          return "";
+        }
+        const lines = log.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+        const important = lines.filter((line) =>
+          /Build failed:|SIGKILL|Killed|not found|exit code|signal|Split points/i.test(line)
+        );
+        const picked = (important.length ? important : lines).slice(-3);
+        return picked.join(" / ");
+      }
+
       async function pollBuild(jobId) {
         try {
           const response = await fetch(`/api/build-status?id=${encodeURIComponent(jobId)}`);
@@ -772,6 +785,7 @@
           }
 
           if (data.status === "failed") {
+            const summary = buildFailureSummary(data.log);
             stopPolling();
             buildButton.disabled = false;
             buildButton.textContent = "MP4を作成する";
@@ -787,6 +801,10 @@
           buildButton.disabled = false;
           buildButton.textContent = "MP4を作成する";
           resultMessage.textContent = error.message;
+          const details = document.querySelector("details");
+          if (details) {
+            details.open = true;
+          }
         }
       }
 
