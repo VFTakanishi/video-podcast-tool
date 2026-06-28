@@ -33,10 +33,10 @@ const disableJingles = document.getElementById("disableJingles");
 const insertTimesList = document.getElementById("insertTimesList");
 const addInsertTimeButton = document.getElementById("addInsertTimeButton");
 
-const DEFAULT_STAGE = { title: "準備中...", percent: 0 };
 const DB_NAME = "video-podcast-tool-free";
 const STORE_NAME = "assets";
 const ASSET_KEYS = ["bgm", "jingle", "introImage", "jingleImage"];
+const DIRECT_SEGMENT_LIMIT_SECONDS = 600;
 
 let ffmpegLibPromise = null;
 let ffmpegState = null;
@@ -57,9 +57,7 @@ function setProgress(title, percent, note) {
   progressWrap.classList.remove("hidden");
   progressTitle.textContent = title;
   progressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-  if (note) {
-    progressNote.textContent = note;
-  }
+  progressNote.textContent = note || "";
 }
 
 function showFailure(message) {
@@ -81,9 +79,10 @@ function parseTimeToSeconds(value) {
   if (/^\d+(\.\d+)?$/.test(raw)) {
     return Number(raw);
   }
-  const parts = raw.split(":").map(Number);
+
+  const parts = raw.split(":").map((item) => Number(item));
   if (parts.some((item) => Number.isNaN(item))) {
-    throw new Error(`時間指定を読み取れません: ${value}`);
+    throw new Error(`時刻の書き方が正しくありません: ${value}`);
   }
   if (parts.length === 3) {
     return parts[0] * 3600 + parts[1] * 60 + parts[2];
@@ -91,7 +90,7 @@ function parseTimeToSeconds(value) {
   if (parts.length === 2) {
     return parts[0] * 60 + parts[1];
   }
-  throw new Error(`時間指定を読み取れません: ${value}`);
+  throw new Error(`時刻の書き方が正しくありません: ${value}`);
 }
 
 function secondsToTimestamp(totalSeconds) {
@@ -133,11 +132,10 @@ function applyCurrentPreset(targetName, targetMeta, asset) {
     return;
   }
   targetName.textContent = asset.name || "保存済み素材";
-  targetMeta.textContent = asset.updatedAt ? `保存日時: ${formatDateString(asset.updatedAt)}` : "";
+  targetMeta.textContent = asset.updatedAt ? `更新: ${formatDateString(asset.updatedAt)}` : "";
 }
 
 function applyDefaultHints(defaults) {
-  const names = [];
   const bgm = defaults.bgm || null;
   const jingle = defaults.jingle || null;
   const introImage = defaults.introImage || null;
@@ -153,11 +151,7 @@ function applyDefaultHints(defaults) {
   applyCurrentPreset(currentIntro, currentIntroMeta, introImage);
   applyCurrentPreset(currentJingleImage, currentJingleImageMeta, jingleImage);
 
-  for (const asset of [bgm, jingle, introImage, jingleImage]) {
-    if (asset?.name) {
-      names.push(asset.name);
-    }
-  }
+  const names = [bgm, jingle, introImage, jingleImage].filter((item) => item?.name);
   presetBadge.textContent = names.length ? "保存済み" : "未設定";
 }
 
@@ -173,6 +167,7 @@ function syncJingleInputsState() {
 
 function createInsertTimeRow(value = "") {
   insertTimeCount += 1;
+
   const row = document.createElement("div");
   row.className = "time-row";
 
@@ -234,14 +229,13 @@ async function saveDefaultAsset(key, file) {
     const transaction = db.transaction(STORE_NAME, "readwrite");
     transaction.onerror = () => reject(transaction.error);
     transaction.oncomplete = () => resolve();
-    const payload = {
+    transaction.objectStore(STORE_NAME).put({
       key,
       name: file.name,
       type: file.type,
       updatedAt: new Date().toISOString(),
       blob: file
-    };
-    transaction.objectStore(STORE_NAME).put(payload);
+    });
   });
 }
 
@@ -269,19 +263,12 @@ async function loadAllDefaults() {
 async function getDurationSeconds(file) {
   const objectUrl = URL.createObjectURL(file);
   try {
-    await new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
       const video = document.createElement("video");
       video.preload = "metadata";
       video.onloadedmetadata = () => resolve(video.duration);
       video.onerror = () => reject(new Error("本編動画の長さを読み取れませんでした。"));
       video.src = objectUrl;
-    });
-    const probe = document.createElement("video");
-    probe.preload = "metadata";
-    probe.src = objectUrl;
-    return await new Promise((resolve, reject) => {
-      probe.onloadedmetadata = () => resolve(probe.duration);
-      probe.onerror = () => reject(new Error("本編動画の長さを読み取れませんでした。"));
     });
   } finally {
     URL.revokeObjectURL(objectUrl);
@@ -300,6 +287,30 @@ async function pickAsset(runFile, defaultAsset, requiredLabel) {
   throw new Error(`${requiredLabel} がありません。`);
 }
 
+function getFileExtension(file) {
+  const fromName = String(file?.name || "").match(/(\.[A-Za-z0-9]+)$/);
+  if (fromName) {
+    return fromName[1].toLowerCase();
+  }
+
+  const byMime = {
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/aac": ".aac",
+    "audio/mp4": ".m4a",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp"
+  };
+  return byMime[file?.type] || "";
+}
+
+function buildVirtualName(baseName, file) {
+  return `${baseName}${getFileExtension(file)}`;
+}
+
 async function loadFfmpegLib() {
   if (!ffmpegLibPromise) {
     ffmpegLibPromise = Promise.all([
@@ -315,24 +326,24 @@ async function ensureFfmpeg() {
     return ffmpegState;
   }
 
-  setStatus("変換エンジンを読み込み中...");
-  setProgress("変換エンジンを読み込み中...", 3, "初回だけ少し時間がかかります。");
+  setStatus("準備中...");
+  setProgress("動画エンジンを読み込み中...", 3, "最初の1回だけ少し時間がかかります。");
 
   const [{ FFmpeg }, { toBlobURL }] = await loadFfmpegLib();
   const ffmpeg = new FFmpeg();
   const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
-  let stage = DEFAULT_STAGE;
+  let currentStage = { title: "準備中", start: 0, end: 0, note: "" };
 
   ffmpeg.on("log", ({ message }) => {
     appendLog(message);
   });
 
   ffmpeg.on("progress", ({ progress }) => {
-    if (!stage || typeof progress !== "number") {
+    if (typeof progress !== "number") {
       return;
     }
-    const percent = stage.start + (stage.end - stage.start) * progress;
-    setProgress(stage.title, percent, stage.note);
+    const percent = currentStage.start + (currentStage.end - currentStage.start) * progress;
+    setProgress(currentStage.title, percent, currentStage.note);
   });
 
   await ffmpeg.load({
@@ -343,9 +354,9 @@ async function ensureFfmpeg() {
   ffmpegState = {
     ready: true,
     ffmpeg,
-    setStage(nextStage) {
-      stage = nextStage;
-      setProgress(nextStage.title, nextStage.start, nextStage.note);
+    setStage(stage) {
+      currentStage = stage;
+      setProgress(stage.title, stage.start, stage.note);
     }
   };
 
@@ -363,6 +374,49 @@ async function execStage(runtime, stage, args) {
   appendLog(`[run] ${stage.title}`);
   appendLog(args.join(" "));
   await runtime.ffmpeg.exec(args);
+}
+
+async function buildMainSegment(runtime, options) {
+  const {
+    mainPath,
+    bgmPath,
+    scalePad,
+    outputPath,
+    start,
+    duration,
+    stage
+  } = options;
+
+  const args = ["-y"];
+  if (typeof start === "number") {
+    args.push("-ss", secondsToTimestamp(start));
+  }
+  if (typeof duration === "number") {
+    args.push("-t", secondsToTimestamp(duration));
+  }
+  args.push(
+    "-i", mainPath,
+    "-stream_loop", "-1",
+    "-i", bgmPath,
+    "-filter_complex",
+    "[0:a]aformat=sample_rates=48000:channel_layouts=stereo[main];[1:a]volume=0.1,aformat=sample_rates=48000:channel_layouts=stereo[bgm];[main][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+    "-map", "0:v:0",
+    "-map", "[aout]",
+    "-vf", scalePad,
+    "-c:v", "libx264",
+    "-preset", "ultrafast",
+    "-threads", "1",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-pix_fmt", "yuv420p",
+    "-r", "30",
+    "-ar", "48000",
+    "-ac", "2",
+    "-shortest",
+    outputPath
+  );
+
+  await execStage(runtime, stage, args);
 }
 
 async function buildPodcast(files, defaults) {
@@ -384,13 +438,13 @@ async function buildPodcast(files, defaults) {
   }
 
   const mainPath = `${runId}_main.mp4`;
-  const bgmPath = `${runId}_bgm`;
-  const introImagePath = `${runId}_intro`;
-  const introOut = `${runId}_01_intro.mp4`;
-  const mainOut = `${runId}_02_main_with_bgm.mp4`;
-  const jinglePath = `${runId}_jingle`;
-  const jingleImagePath = `${runId}_jingle_image`;
-  const jingleOut = `${runId}_03_jingle.mp4`;
+  const bgmPath = buildVirtualName(`${runId}_bgm`, bgm);
+  const introImagePath = buildVirtualName(`${runId}_intro`, introImage);
+  const mainOut = `${runId}_main_full.mp4`;
+  const introOut = `${runId}_intro.mp4`;
+  const jinglePath = useJingles ? buildVirtualName(`${runId}_jingle`, jingle) : "";
+  const jingleImagePath = useJingles ? buildVirtualName(`${runId}_jingle_image`, jingleImage) : "";
+  const jingleOut = `${runId}_jingle.mp4`;
   const concatListPath = `${runId}_concat.txt`;
   const finalPath = `${runId}_${outputName}`;
 
@@ -406,7 +460,7 @@ async function buildPodcast(files, defaults) {
     title: "イントロ動画を作成中...",
     start: 6,
     end: 16,
-    note: "イントロ画像にBGMを重ねています。"
+    note: "イントロ画像とBGMを重ねています。"
   }, [
     "-y",
     "-loop", "1",
@@ -431,42 +485,14 @@ async function buildPodcast(files, defaults) {
     introOut
   ]);
 
-  await execStage(runtime, {
-    title: "本編にBGMを重ねています...",
-    start: 16,
-    end: 58,
-    note: "本編音声とBGMを1本にまとめています。"
-  }, [
-    "-y",
-    "-i", mainPath,
-    "-stream_loop", "-1",
-    "-i", bgmPath,
-    "-filter_complex",
-    "[0:a]aformat=sample_rates=48000:channel_layouts=stereo[main];[1:a]volume=0.1,aformat=sample_rates=48000:channel_layouts=stereo[bgm];[main][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]",
-    "-map", "0:v:0",
-    "-map", "[aout]",
-    "-vf", scalePad,
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-threads", "1",
-    "-c:a", "aac",
-    "-b:a", "128k",
-    "-pix_fmt", "yuv420p",
-    "-r", "30",
-    "-ar", "48000",
-    "-ac", "2",
-    "-shortest",
-    mainOut
-  ]);
-
   const clips = [introOut];
 
   if (useJingles) {
     await execStage(runtime, {
-      title: "ジングルを作成しています...",
-      start: 58,
-      end: 68,
-      note: "ジングル画像と音をまとめています。"
+      title: "ジングルを作成中...",
+      start: 16,
+      end: 24,
+      note: "ジングル画像と音声を組み合わせています。"
     }, [
       "-y",
       "-loop", "1",
@@ -491,40 +517,91 @@ async function buildPodcast(files, defaults) {
     ]);
 
     const boundaries = [0, ...insertTimes.sort((a, b) => a - b), mainDuration];
-    const splitSpan = Math.max(1, boundaries.length - 1);
+    const segmentJobs = [];
 
     for (let i = 0; i < boundaries.length - 1; i += 1) {
-      const segmentPath = `${runId}_segment_${String(i + 1).padStart(2, "0")}.mp4`;
       const start = boundaries[i];
-      const duration = Math.max(0, boundaries[i + 1] - boundaries[i]);
-      await execStage(runtime, {
-        title: `本編を分割中... (${i + 1}/${splitSpan})`,
-        start: 68 + (20 / splitSpan) * i,
-        end: 68 + (20 / splitSpan) * (i + 1),
-        note: "ジングル位置で本編を分けています。"
-      }, [
-        "-y",
-        "-i", mainOut,
-        "-ss", secondsToTimestamp(start),
-        "-t", secondsToTimestamp(duration),
-        "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-threads", "1",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-pix_fmt", "yuv420p",
-        "-r", "30",
-        "-ar", "48000",
-        "-ac", "2",
-        segmentPath
-      ]);
-      clips.push(segmentPath);
-      if (i < boundaries.length - 2) {
+      const end = boundaries[i + 1];
+      let cursor = start;
+
+      while (cursor < end - 0.001) {
+        const nextEnd = Math.min(end, cursor + DIRECT_SEGMENT_LIMIT_SECONDS);
+        const duration = Math.max(0, nextEnd - cursor);
+        if (duration <= 0.001) {
+          break;
+        }
+        segmentJobs.push({
+          segmentPath: `${runId}_segment_${String(segmentJobs.length + 1).padStart(2, "0")}.mp4`,
+          start: cursor,
+          duration,
+          insertJingleAfter: false
+        });
+        cursor = nextEnd;
+      }
+
+      if (i < boundaries.length - 2 && segmentJobs.length) {
+        segmentJobs[segmentJobs.length - 1].insertJingleAfter = true;
+      }
+    }
+
+    for (let i = 0; i < segmentJobs.length; i += 1) {
+      const job = segmentJobs[i];
+      await buildMainSegment(runtime, {
+        mainPath,
+        bgmPath,
+        scalePad,
+        outputPath: job.segmentPath,
+        start: job.start,
+        duration: job.duration,
+        stage: {
+          title: `本編を作成中... (${i + 1}/${segmentJobs.length})`,
+          start: 24 + (66 / Math.max(1, segmentJobs.length)) * i,
+          end: 24 + (66 / Math.max(1, segmentJobs.length)) * (i + 1),
+          note: "本編を少しずつ処理しています。"
+        }
+      });
+      clips.push(job.segmentPath);
+      if (job.insertJingleAfter) {
         clips.push(jingleOut);
       }
     }
-  } else {
+  } else if (mainDuration <= DIRECT_SEGMENT_LIMIT_SECONDS) {
+    await buildMainSegment(runtime, {
+      mainPath,
+      bgmPath,
+      scalePad,
+      outputPath: mainOut,
+      stage: {
+        title: "本編にBGMを重ねています...",
+        start: 16,
+        end: 90,
+        note: "本編をまとめて処理しています。"
+      }
+    });
     clips.push(mainOut);
+  } else {
+    const segmentCount = Math.ceil(mainDuration / DIRECT_SEGMENT_LIMIT_SECONDS);
+
+    for (let i = 0; i < segmentCount; i += 1) {
+      const start = i * DIRECT_SEGMENT_LIMIT_SECONDS;
+      const duration = Math.min(DIRECT_SEGMENT_LIMIT_SECONDS, mainDuration - start);
+      const segmentPath = `${runId}_segment_${String(i + 1).padStart(2, "0")}.mp4`;
+      await buildMainSegment(runtime, {
+        mainPath,
+        bgmPath,
+        scalePad,
+        outputPath: segmentPath,
+        start,
+        duration,
+        stage: {
+          title: `本編にBGMを重ねています... (${i + 1}/${segmentCount})`,
+          start: 16 + (74 / segmentCount) * i,
+          end: 16 + (74 / segmentCount) * (i + 1),
+          note: "長い動画なので分けて処理しています。"
+        }
+      });
+      clips.push(segmentPath);
+    }
   }
 
   const concatBody = clips.map((clip) => `file '${clip}'`).join("\n");
@@ -534,7 +611,7 @@ async function buildPodcast(files, defaults) {
     title: "最後に1本へまとめています...",
     start: 90,
     end: 100,
-    note: "完成MP4を仕上げています。"
+    note: "書き出し用のMP4を作成しています。"
   }, [
     "-y",
     "-f", "concat",
@@ -592,7 +669,7 @@ form.addEventListener("submit", async (event) => {
     };
 
     const { data, outputName } = await buildPodcast(files, defaults);
-    const blob = new Blob([data.buffer], { type: "video/mp4" });
+    const blob = new Blob([data], { type: "video/mp4" });
     outputObjectUrl = URL.createObjectURL(blob);
 
     resultMessage.textContent = "作成が完了しました。";
@@ -601,12 +678,13 @@ form.addEventListener("submit", async (event) => {
     resultLinkWrap.classList.remove("hidden");
     previewVideo.src = outputObjectUrl;
     previewWrap.classList.remove("hidden");
-    setProgress("完成しました", 100, "必要なら完成動画を保存してください。");
-    setStatus("準備できました");
+    setProgress("作成完了", 100, "必要ならこのまま動画を保存してください。");
+    setStatus("完了");
   } catch (error) {
-    showFailure(error.message || "作成に失敗しました。");
-    setProgress("失敗しました", 100, "詳細ログを開いて原因を確認してください。");
-    setStatus("失敗しました");
+    const message = error?.message || "作成に失敗しました。";
+    showFailure(message);
+    setProgress("失敗しました", 100, "詳細ログを開くと原因を確認できます。");
+    setStatus("失敗");
   } finally {
     buildButton.disabled = false;
     buildButton.textContent = "MP4を作成する";
@@ -617,6 +695,7 @@ presetForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   presetButton.disabled = true;
   presetButton.textContent = "保存中...";
+
   try {
     const files = {
       bgm: document.getElementById("presetBgm").files[0],
@@ -639,7 +718,7 @@ presetForm.addEventListener("submit", async (event) => {
       ? `保存しました: ${updated.join(", ")}`
       : "新しく保存した素材はありません。";
   } catch (error) {
-    presetNote.textContent = error.message;
+    presetNote.textContent = error?.message || "標準素材の保存に失敗しました。";
   } finally {
     presetButton.disabled = false;
     presetButton.textContent = "標準素材を保存する";
