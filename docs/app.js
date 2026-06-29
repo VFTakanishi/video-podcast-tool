@@ -44,21 +44,85 @@ let ffmpegState = null;
 let buildCounter = 0;
 let outputObjectUrl = "";
 let insertTimeCount = 0;
+let buildStartAt = 0;
+let lastActivityAt = 0;
+let buildWatchdogId = 0;
+let currentProgressTitle = "";
+let currentProgressBaseNote = "";
 
 function setStatus(text) {
   statusBadge.textContent = text;
 }
 
+function markActivity() {
+  lastActivityAt = Date.now();
+}
+
 function appendLog(text) {
+  markActivity();
   logBox.textContent += `${text}\n`;
   logBox.scrollTop = logBox.scrollHeight;
 }
 
 function setProgress(title, percent, note) {
+  markActivity();
   progressWrap.classList.remove("hidden");
+  currentProgressTitle = title;
+  currentProgressBaseNote = note || "";
   progressTitle.textContent = title;
   progressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-  progressNote.textContent = note || "";
+  progressNote.textContent = currentProgressBaseNote;
+}
+
+function formatSecondsLabel(totalSeconds) {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  if (minutes > 0) {
+    return `${minutes}分${seconds}秒`;
+  }
+  return `${seconds}秒`;
+}
+
+function refreshProgressHeartbeat() {
+  if (!buildStartAt) {
+    return;
+  }
+
+  const elapsed = formatSecondsLabel((Date.now() - buildStartAt) / 1000);
+  const idle = formatSecondsLabel((Date.now() - lastActivityAt) / 1000);
+  let note = currentProgressBaseNote || "";
+
+  if (note) {
+    note += " ";
+  }
+  note += `経過 ${elapsed} / 最終更新 ${idle}前`;
+
+  if (Date.now() - lastActivityAt >= 30000) {
+    note += " / しばらく更新がありません";
+  }
+
+  progressTitle.textContent = currentProgressTitle || "処理中...";
+  progressNote.textContent = note;
+}
+
+function startBuildWatchdog() {
+  stopBuildWatchdog();
+  buildStartAt = Date.now();
+  lastActivityAt = buildStartAt;
+  refreshProgressHeartbeat();
+  buildWatchdogId = window.setInterval(() => {
+    refreshProgressHeartbeat();
+  }, 1000);
+}
+
+function stopBuildWatchdog() {
+  if (buildWatchdogId) {
+    clearInterval(buildWatchdogId);
+    buildWatchdogId = 0;
+  }
+  buildStartAt = 0;
+  lastActivityAt = 0;
 }
 
 function showFailure(message) {
@@ -370,7 +434,6 @@ async function ensureFfmpeg() {
     setProgress(currentStage.title, percent, currentStage.note);
   });
 
-<<<<<<< HEAD
   const coreURL = await withTimeout(
     toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
     FFMPEG_LOAD_TIMEOUT_MS,
@@ -398,13 +461,6 @@ async function ensureFfmpeg() {
     "動画エンジンの起動が2分以上止まっています。待ち続けず、ページを再読み込みして再実行してください。"
   );
   appendLog("[setup] ffmpeg ready");
-=======
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-    classWorkerURL: await toBlobURL(`${workerBaseURL}/worker.js`, "text/javascript")
-  });
->>>>>>> d2c0edfb7e6ae1acb738dfcfe2d4f1229ed11bc8
 
   ffmpegState = {
     ready: true,
@@ -695,11 +751,13 @@ form.addEventListener("submit", async (event) => {
   result.classList.remove("hidden");
   resultLinkWrap.classList.add("hidden");
   previewWrap.classList.add("hidden");
-  logDetails.open = false;
+  logDetails.open = true;
   logBox.textContent = "";
   resultMessage.textContent = "作成を始めます。";
   progressWrap.classList.remove("hidden");
   buildButton.disabled = true;
+  startBuildWatchdog();
+  appendLog("[setup] Build started");
   buildButton.textContent = "作成中...";
   setStatus("作成中...");
 
@@ -741,6 +799,7 @@ form.addEventListener("submit", async (event) => {
     setProgress("失敗しました", 100, "詳細ログを開くと原因を確認できます。");
     setStatus("失敗");
   } finally {
+    stopBuildWatchdog();
     buildButton.disabled = false;
     buildButton.textContent = "MP4を作成する";
   }
