@@ -37,6 +37,7 @@ const DB_NAME = "video-podcast-tool-free";
 const STORE_NAME = "assets";
 const ASSET_KEYS = ["bgm", "jingle", "introImage", "jingleImage"];
 const DIRECT_SEGMENT_LIMIT_SECONDS = 600;
+const FFMPEG_LOAD_TIMEOUT_MS = 120000;
 
 let ffmpegLibPromise = null;
 let ffmpegState = null;
@@ -311,8 +312,25 @@ function buildVirtualName(baseName, file) {
   return `${baseName}${getFileExtension(file)}`;
 }
 
+async function withTimeout(promise, timeoutMs, message) {
+  let timerId = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timerId = setTimeout(() => reject(new Error(message)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timerId !== null) {
+      clearTimeout(timerId);
+    }
+  }
+}
+
 async function loadFfmpegLib() {
   if (!ffmpegLibPromise) {
+    appendLog("[setup] Loading ffmpeg browser libraries");
     ffmpegLibPromise = Promise.all([
       import("https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js"),
       import("https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js")
@@ -329,10 +347,15 @@ async function ensureFfmpeg() {
   setStatus("準備中...");
   setProgress("動画エンジンを読み込み中...", 3, "最初の1回だけ少し時間がかかります。");
 
-  const [{ FFmpeg }, { toBlobURL }] = await loadFfmpegLib();
+  const [{ FFmpeg }, { toBlobURL }] = await withTimeout(
+    loadFfmpegLib(),
+    FFMPEG_LOAD_TIMEOUT_MS,
+    "動画エンジンの読み込みが止まりました。ページを再読み込みして、もう一度試してください。"
+  );
   const ffmpeg = new FFmpeg();
   const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
   const workerBaseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm";
+  appendLog("[setup] Preparing ffmpeg core");
   let currentStage = { title: "準備中", start: 0, end: 0, note: "" };
 
   ffmpeg.on("log", ({ message }) => {
@@ -347,11 +370,33 @@ async function ensureFfmpeg() {
     setProgress(currentStage.title, percent, currentStage.note);
   });
 
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-    classWorkerURL: await toBlobURL(`${workerBaseURL}/worker.js`, "text/javascript")
-  });
+  const coreURL = await withTimeout(
+    toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+    FFMPEG_LOAD_TIMEOUT_MS,
+    "動画エンジンの準備で止まりました。ページを再読み込みして、もう一度試してください。"
+  );
+  const wasmURL = await withTimeout(
+    toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+    FFMPEG_LOAD_TIMEOUT_MS,
+    "動画エンジン本体の取得で止まりました。ページを再読み込みして、もう一度試してください。"
+  );
+  const classWorkerURL = await withTimeout(
+    toBlobURL(`${workerBaseURL}/worker.js`, "text/javascript"),
+    FFMPEG_LOAD_TIMEOUT_MS,
+    "動画エンジンの起動準備で止まりました。ページを再読み込みして、もう一度試してください。"
+  );
+
+  appendLog("[setup] Starting ffmpeg core");
+  await withTimeout(
+    ffmpeg.load({
+      coreURL,
+      wasmURL,
+      classWorkerURL
+    }),
+    FFMPEG_LOAD_TIMEOUT_MS,
+    "動画エンジンの起動が2分以上止まっています。待ち続けず、ページを再読み込みして再実行してください。"
+  );
+  appendLog("[setup] ffmpeg ready");
 
   ffmpegState = {
     ready: true,
