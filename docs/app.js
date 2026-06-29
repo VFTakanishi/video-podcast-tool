@@ -37,7 +37,7 @@ const DB_NAME = "video-podcast-tool-free";
 const STORE_NAME = "assets";
 const ASSET_KEYS = ["bgm", "jingle", "introImage", "jingleImage"];
 const DIRECT_SEGMENT_LIMIT_SECONDS = 600;
-const FFMPEG_LOAD_TIMEOUT_MS = 120000;
+const FFMPEG_TIMEOUT_MS = 120000;
 
 let ffmpegLibPromise = null;
 let ffmpegState = null;
@@ -66,63 +66,12 @@ function appendLog(text) {
 
 function setProgress(title, percent, note) {
   markActivity();
-  progressWrap.classList.remove("hidden");
   currentProgressTitle = title;
   currentProgressBaseNote = note || "";
+  progressWrap.classList.remove("hidden");
   progressTitle.textContent = title;
   progressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
   progressNote.textContent = currentProgressBaseNote;
-}
-
-function formatSecondsLabel(totalSeconds) {
-  const safe = Math.max(0, Math.floor(totalSeconds));
-  const minutes = Math.floor(safe / 60);
-  const seconds = safe % 60;
-  if (minutes > 0) {
-    return `${minutes}分${seconds}秒`;
-  }
-  return `${seconds}秒`;
-}
-
-function refreshProgressHeartbeat() {
-  if (!buildStartAt) {
-    return;
-  }
-
-  const elapsed = formatSecondsLabel((Date.now() - buildStartAt) / 1000);
-  const idle = formatSecondsLabel((Date.now() - lastActivityAt) / 1000);
-  let note = currentProgressBaseNote || "";
-
-  if (note) {
-    note += " ";
-  }
-  note += `経過 ${elapsed} / 最終更新 ${idle}前`;
-
-  if (Date.now() - lastActivityAt >= 30000) {
-    note += " / しばらく更新がありません";
-  }
-
-  progressTitle.textContent = currentProgressTitle || "処理中...";
-  progressNote.textContent = note;
-}
-
-function startBuildWatchdog() {
-  stopBuildWatchdog();
-  buildStartAt = Date.now();
-  lastActivityAt = buildStartAt;
-  refreshProgressHeartbeat();
-  buildWatchdogId = window.setInterval(() => {
-    refreshProgressHeartbeat();
-  }, 1000);
-}
-
-function stopBuildWatchdog() {
-  if (buildWatchdogId) {
-    clearInterval(buildWatchdogId);
-    buildWatchdogId = 0;
-  }
-  buildStartAt = 0;
-  lastActivityAt = 0;
 }
 
 function showFailure(message) {
@@ -274,6 +223,57 @@ function getInsertTimes() {
     .filter(Boolean);
 }
 
+function formatSecondsLabel(totalSeconds) {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  if (minutes > 0) {
+    return `${minutes}分${seconds}秒`;
+  }
+  return `${seconds}秒`;
+}
+
+function refreshProgressHeartbeat() {
+  if (!buildStartAt) {
+    return;
+  }
+
+  const elapsed = formatSecondsLabel((Date.now() - buildStartAt) / 1000);
+  const idle = formatSecondsLabel((Date.now() - lastActivityAt) / 1000);
+  let note = currentProgressBaseNote || "";
+
+  if (note) {
+    note += " ";
+  }
+  note += `経過 ${elapsed} / 最終更新 ${idle}前`;
+
+  if (Date.now() - lastActivityAt >= 30000) {
+    note += " / しばらく更新がありません";
+  }
+
+  progressTitle.textContent = currentProgressTitle || "処理中...";
+  progressNote.textContent = note;
+}
+
+function startBuildWatchdog() {
+  stopBuildWatchdog();
+  buildStartAt = Date.now();
+  lastActivityAt = buildStartAt;
+  refreshProgressHeartbeat();
+  buildWatchdogId = window.setInterval(() => {
+    refreshProgressHeartbeat();
+  }, 1000);
+}
+
+function stopBuildWatchdog() {
+  if (buildWatchdogId) {
+    clearInterval(buildWatchdogId);
+    buildWatchdogId = 0;
+  }
+  buildStartAt = 0;
+  lastActivityAt = 0;
+}
+
 function openDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
@@ -382,7 +382,7 @@ async function withTimeout(promise, timeoutMs, message) {
     return await Promise.race([
       promise,
       new Promise((_, reject) => {
-        timerId = setTimeout(() => reject(new Error(message)), timeoutMs);
+        timerId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
       })
     ]);
   } finally {
@@ -413,14 +413,16 @@ async function ensureFfmpeg() {
 
   const [{ FFmpeg }, { toBlobURL }] = await withTimeout(
     loadFfmpegLib(),
-    FFMPEG_LOAD_TIMEOUT_MS,
+    FFMPEG_TIMEOUT_MS,
     "動画エンジンの読み込みが止まりました。ページを再読み込みして、もう一度試してください。"
   );
+
   const ffmpeg = new FFmpeg();
   const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
   const workerBaseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm";
+  let currentStage = { title: "準備中...", start: 0, end: 0, note: "" };
+
   appendLog("[setup] Preparing ffmpeg core");
-  let currentStage = { title: "準備中", start: 0, end: 0, note: "" };
 
   ffmpeg.on("log", ({ message }) => {
     appendLog(message);
@@ -436,17 +438,17 @@ async function ensureFfmpeg() {
 
   const coreURL = await withTimeout(
     toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-    FFMPEG_LOAD_TIMEOUT_MS,
+    FFMPEG_TIMEOUT_MS,
     "動画エンジンの準備で止まりました。ページを再読み込みして、もう一度試してください。"
   );
   const wasmURL = await withTimeout(
     toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-    FFMPEG_LOAD_TIMEOUT_MS,
+    FFMPEG_TIMEOUT_MS,
     "動画エンジン本体の取得で止まりました。ページを再読み込みして、もう一度試してください。"
   );
   const classWorkerURL = await withTimeout(
     toBlobURL(`${workerBaseURL}/worker.js`, "text/javascript"),
-    FFMPEG_LOAD_TIMEOUT_MS,
+    FFMPEG_TIMEOUT_MS,
     "動画エンジンの起動準備で止まりました。ページを再読み込みして、もう一度試してください。"
   );
 
@@ -457,8 +459,8 @@ async function ensureFfmpeg() {
       wasmURL,
       classWorkerURL
     }),
-    FFMPEG_LOAD_TIMEOUT_MS,
-    "動画エンジンの起動が2分以上止まっています。待ち続けず、ページを再読み込みして再実行してください。"
+    FFMPEG_TIMEOUT_MS,
+    "動画エンジンの起動が2分以上止まっています。ページを再読み込みして再実行してください。"
   );
   appendLog("[setup] ffmpeg ready");
 
@@ -505,6 +507,7 @@ async function buildMainSegment(runtime, options) {
   if (typeof duration === "number") {
     args.push("-t", secondsToTimestamp(duration));
   }
+
   args.push(
     "-i", mainPath,
     "-stream_loop", "-1",
@@ -692,7 +695,6 @@ async function buildPodcast(files, defaults) {
     clips.push(mainOut);
   } else {
     const segmentCount = Math.ceil(mainDuration / DIRECT_SEGMENT_LIMIT_SECONDS);
-
     for (let i = 0; i < segmentCount; i += 1) {
       const start = i * DIRECT_SEGMENT_LIMIT_SECONDS;
       const duration = Math.min(DIRECT_SEGMENT_LIMIT_SECONDS, mainDuration - start);
@@ -742,7 +744,7 @@ async function refreshDefaults() {
     applyDefaultHints(defaults);
   } catch (error) {
     applyDefaultHints({});
-    presetNote.textContent = error.message;
+    presetNote.textContent = error?.message || "標準素材の読み込みに失敗しました。";
   }
 }
 
@@ -753,13 +755,13 @@ form.addEventListener("submit", async (event) => {
   previewWrap.classList.add("hidden");
   logDetails.open = true;
   logBox.textContent = "";
-  resultMessage.textContent = "作成を始めます。";
+  resultMessage.textContent = "作成を開始しました。";
   progressWrap.classList.remove("hidden");
   buildButton.disabled = true;
-  startBuildWatchdog();
-  appendLog("[setup] Build started");
   buildButton.textContent = "作成中...";
   setStatus("作成中...");
+  startBuildWatchdog();
+  appendLog("[setup] Build started");
 
   try {
     if (outputObjectUrl) {
