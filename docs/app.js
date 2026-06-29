@@ -370,6 +370,7 @@ async function ensureFfmpeg() {
     setProgress(currentStage.title, percent, currentStage.note);
   });
 
+<<<<<<< HEAD
   const coreURL = await withTimeout(
     toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
     FFMPEG_LOAD_TIMEOUT_MS,
@@ -397,6 +398,13 @@ async function ensureFfmpeg() {
     "動画エンジンの起動が2分以上止まっています。待ち続けず、ページを再読み込みして再実行してください。"
   );
   appendLog("[setup] ffmpeg ready");
+=======
+  await ffmpeg.load({
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+    classWorkerURL: await toBlobURL(`${workerBaseURL}/worker.js`, "text/javascript")
+  });
+>>>>>>> d2c0edfb7e6ae1acb738dfcfe2d4f1229ed11bc8
 
   ffmpegState = {
     ready: true,
