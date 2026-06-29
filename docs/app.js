@@ -572,21 +572,40 @@ async function buildMainSegment(runtime, options) {
     stage
   } = options;
 
+  const hasTrim = typeof start === "number" || typeof duration === "number";
+  const trimStart = typeof start === "number" ? Math.max(0, start) : 0;
+  const trimDuration = typeof duration === "number" ? Math.max(0, duration) : null;
+
+  const videoFilters = [];
+  const audioFilters = [];
+
+  if (hasTrim) {
+    const trimArgs = [`start=${trimStart}`];
+    if (trimDuration !== null) {
+      trimArgs.push(`duration=${trimDuration}`);
+    }
+    videoFilters.push(`trim=${trimArgs.join(":")}`, "setpts=PTS-STARTPTS");
+    audioFilters.push(`atrim=${trimArgs.join(":")}`, "asetpts=PTS-STARTPTS");
+  }
+
+  const mainVideoChain = videoFilters.length
+    ? `[0:v]${videoFilters.join(",")}[vout]`
+    : "[0:v]setpts=PTS-STARTPTS[vout]";
+  const mainAudioChain = audioFilters.length
+    ? `[0:a]${audioFilters.join(",")},aformat=sample_rates=48000:channel_layouts=stereo[main]`
+    : "[0:a]aformat=sample_rates=48000:channel_layouts=stereo[main]";
+  const bgmChain = "[1:a]volume=0.1,aformat=sample_rates=48000:channel_layouts=stereo[bgm]";
+  const mixChain = "[main][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]";
+
   const args = ["-y"];
-  if (typeof start === "number") {
-    args.push("-ss", secondsToTimestamp(start));
-  }
-  if (typeof duration === "number") {
-    args.push("-t", secondsToTimestamp(duration));
-  }
 
   args.push(
     "-i", mainPath,
     "-stream_loop", "-1",
     "-i", bgmPath,
     "-filter_complex",
-    "[0:a]aformat=sample_rates=48000:channel_layouts=stereo[main];[1:a]volume=0.1,aformat=sample_rates=48000:channel_layouts=stereo[bgm];[main][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]",
-    "-map", "0:v:0",
+    `${mainVideoChain};${mainAudioChain};${bgmChain};${mixChain}`,
+    "-map", "[vout]",
     "-map", "[aout]",
     "-vf", scalePad,
     "-c:v", "libx264",
