@@ -36,11 +36,13 @@ const addInsertTimeButton = document.getElementById("addInsertTimeButton");
 const DB_NAME = "video-podcast-tool-free";
 const STORE_NAME = "assets";
 const ASSET_KEYS = ["bgm", "jingle", "introImage", "jingleImage"];
+const BUNDLED_DEFAULTS_URL = "./default-assets/defaults.json";
 const DIRECT_SEGMENT_LIMIT_SECONDS = 600;
 const FFMPEG_TIMEOUT_MS = 120000;
 
 let ffmpegLibPromise = null;
 let ffmpegState = null;
+let bundledDefaultsPromise = null;
 let buildCounter = 0;
 let outputObjectUrl = "";
 let insertTimeCount = 0;
@@ -139,6 +141,15 @@ function formatDateString(value) {
   return date.toLocaleString("ja-JP");
 }
 
+function getAssetSourceLabel(asset) {
+  if (!asset) {
+    return "";
+  }
+  return asset.source === "bundled"
+    ? "最初から入っている標準素材"
+    : "このブラウザに保存した標準素材";
+}
+
 function applyCurrentPreset(targetName, targetMeta, asset) {
   if (!asset) {
     targetName.textContent = "未設定";
@@ -146,7 +157,11 @@ function applyCurrentPreset(targetName, targetMeta, asset) {
     return;
   }
   targetName.textContent = asset.name || "保存済み素材";
-  targetMeta.textContent = asset.updatedAt ? `更新: ${formatDateString(asset.updatedAt)}` : "";
+  const meta = [getAssetSourceLabel(asset)];
+  if (asset.updatedAt) {
+    meta.push(`更新: ${formatDateString(asset.updatedAt)}`);
+  }
+  targetMeta.textContent = meta.join(" / ");
 }
 
 function applyDefaultHints(defaults) {
@@ -274,6 +289,10 @@ function stopBuildWatchdog() {
   lastActivityAt = 0;
 }
 
+function buildBundledAssetUrl(storedName) {
+  return new URL(`./default-assets/${storedName}`, window.location.href).toString();
+}
+
 function openDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
@@ -311,18 +330,59 @@ async function loadDefaultAsset(key) {
     transaction.onerror = () => reject(transaction.error);
     const request = transaction.objectStore(STORE_NAME).get(key);
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => resolve(request.result ? { ...request.result, source: "saved" } : null);
   });
 }
 
-async function loadAllDefaults() {
-  const entries = await Promise.all(ASSET_KEYS.map((key) => loadDefaultAsset(key)));
+async function loadBundledDefaultsManifest() {
+  if (!bundledDefaultsPromise) {
+    bundledDefaultsPromise = fetch(BUNDLED_DEFAULTS_URL, { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) {
+        throw new Error("標準素材の情報を読み込めませんでした。");
+      }
+      return response.json();
+    });
+  }
+  return bundledDefaultsPromise;
+}
+
+async function loadBundledAsset(key) {
+  const manifest = await loadBundledDefaultsManifest().catch(() => null);
+  const entry = manifest?.[key];
+  if (!entry?.storedName) {
+    return null;
+  }
   return {
-    bgm: entries[0],
-    jingle: entries[1],
-    introImage: entries[2],
-    jingleImage: entries[3]
+    key,
+    name: entry.originalName || entry.storedName,
+    type: entry.type || "",
+    updatedAt: entry.updatedAt || "",
+    url: buildBundledAssetUrl(entry.storedName),
+    source: "bundled"
   };
+}
+
+async function loadPreferredDefault(key) {
+  try {
+    const saved = await loadDefaultAsset(key);
+    if (saved) {
+      return saved;
+    }
+  } catch (error) {
+    console.warn(`Failed to read saved default asset: ${key}`, error);
+  }
+
+  try {
+    return await loadBundledAsset(key);
+  } catch (error) {
+    console.warn(`Failed to read bundled default asset: ${key}`, error);
+    return null;
+  }
+}
+
+async function loadAllDefaults() {
+  const entries = await Promise.all(ASSET_KEYS.map((key) => loadPreferredDefault(key)));
+  return Object.fromEntries(ASSET_KEYS.map((key, index) => [key, entries[index]]));
 }
 
 async function getDurationSeconds(file) {
@@ -340,14 +400,31 @@ async function getDurationSeconds(file) {
   }
 }
 
-async function pickAsset(runFile, defaultAsset, requiredLabel) {
-  if (runFile) {
-    return runFile;
-  }
+async function defaultAssetToFile(defaultAsset, requiredLabel) {
   if (defaultAsset?.blob) {
     return new File([defaultAsset.blob], defaultAsset.name || `${requiredLabel}.bin`, {
       type: defaultAsset.type || defaultAsset.blob.type || "application/octet-stream"
     });
+  }
+  if (defaultAsset?.url) {
+    const response = await fetch(defaultAsset.url, { cache: "force-cache" });
+    if (!response.ok) {
+      throw new Error(`${requiredLabel} を読み込めませんでした。`);
+    }
+    const blob = await response.blob();
+    return new File([blob], defaultAsset.name || `${requiredLabel}.bin`, {
+      type: defaultAsset.type || blob.type || "application/octet-stream"
+    });
+  }
+  throw new Error(`${requiredLabel} がありません。`);
+}
+
+async function pickAsset(runFile, defaultAsset, requiredLabel) {
+  if (runFile) {
+    return runFile;
+  }
+  if (defaultAsset) {
+    return defaultAssetToFile(defaultAsset, requiredLabel);
   }
   throw new Error(`${requiredLabel} がありません。`);
 }

@@ -1,0 +1,22 @@
+{
+  "bgm": {
+    "originalName": "Funky_One.mp3",
+    "storedName": "bgm-audio.mp3",
+    "updatedAt": "2026-06-22T07:40:25.773Z"
+  },
+  "jingle": {
+    "originalName": "car_engine_starting.mp3",
+    "storedName": "jingle-audio.mp3",
+    "updatedAt": "2026-06-22T07:40:25.774Z"
+  },
+  "introImage": {
+    "originalName": "opening_title_B_1920x1080.png",
+    "storedName": "intro-image.png",
+    "updatedAt": "2026-06-22T07:40:25.777Z"
+  },
+  "jingleImage": {
+    "originalName": "opening_title_B_1920x1080.png",
+    "storedName": "jingle-image.png",
+    "updatedAt": "2026-06-22T07:40:25.779Z"
+  }
+}
