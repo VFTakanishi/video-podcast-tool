@@ -1,946 +1,748 @@
-const statusBadge = document.getElementById("statusBadge");
-const form = document.getElementById("buildForm");
-const buildButton = document.getElementById("buildButton");
-const result = document.getElementById("result");
-const resultMessage = document.getElementById("resultMessage");
-const resultLinkWrap = document.getElementById("resultLinkWrap");
-const resultLink = document.getElementById("resultLink");
-const previewWrap = document.getElementById("previewWrap");
-const previewVideo = document.getElementById("previewVideo");
-const logBox = document.getElementById("logBox");
-const logDetails = document.getElementById("logDetails");
-const progressWrap = document.getElementById("progressWrap");
-const progressTitle = document.getElementById("progressTitle");
-const progressFill = document.getElementById("progressFill");
-const progressNote = document.getElementById("progressNote");
-const presetForm = document.getElementById("presetForm");
-const presetButton = document.getElementById("presetButton");
-const presetBadge = document.getElementById("presetBadge");
-const presetNote = document.getElementById("presetNote");
-const bgmHint = document.getElementById("bgmHint");
-const introHint = document.getElementById("introHint");
-const jingleImageHint = document.getElementById("jingleImageHint");
-const jingleHint = document.getElementById("jingleHint");
-const currentBgm = document.getElementById("currentBgm");
-const currentBgmMeta = document.getElementById("currentBgmMeta");
-const currentJingle = document.getElementById("currentJingle");
-const currentJingleMeta = document.getElementById("currentJingleMeta");
-const currentIntro = document.getElementById("currentIntro");
-const currentIntroMeta = document.getElementById("currentIntroMeta");
-const currentJingleImage = document.getElementById("currentJingleImage");
-const currentJingleImageMeta = document.getElementById("currentJingleImageMeta");
-const disableJingles = document.getElementById("disableJingles");
-const insertTimesList = document.getElementById("insertTimesList");
-const addInsertTimeButton = document.getElementById("addInsertTimeButton");
+const elements = {
+  previewCanvas: document.getElementById("previewCanvas"),
+  cameraCanvas: document.getElementById("cameraCanvas"),
+  personCanvas: document.getElementById("personCanvas"),
+  cameraVideo: document.getElementById("cameraVideo"),
+  screenVideo: document.getElementById("screenVideo"),
+  setupButton: document.getElementById("setupButton"),
+  recordButton: document.getElementById("recordButton"),
+  stopButton: document.getElementById("stopButton"),
+  saveButton: document.getElementById("saveButton"),
+  shareButton: document.getElementById("shareButton"),
+  microphoneSelect: document.getElementById("microphoneSelect"),
+  backgroundMode: document.getElementById("backgroundMode"),
+  backgroundImageInput: document.getElementById("backgroundImageInput"),
+  statusText: document.getElementById("statusText"),
+  recordingBadge: document.getElementById("recordingBadge"),
+};
 
-const DB_NAME = "video-podcast-tool-free";
-const STORE_NAME = "assets";
-const ASSET_KEYS = ["bgm", "jingle", "introImage", "jingleImage"];
-const BUNDLED_DEFAULTS_URL = "./default-assets/defaults.json";
-const DIRECT_SEGMENT_LIMIT_SECONDS = 600;
-const FFMPEG_TIMEOUT_MS = 120000;
+const previewCtx = elements.previewCanvas.getContext("2d");
+const cameraCtx = elements.cameraCanvas.getContext("2d");
+const personCtx = elements.personCanvas.getContext("2d");
 
-let ffmpegLibPromise = null;
-let ffmpegState = null;
-let bundledDefaultsPromise = null;
-let buildCounter = 0;
-let outputObjectUrl = "";
-let insertTimeCount = 0;
-let buildStartAt = 0;
-let lastActivityAt = 0;
-let buildWatchdogId = 0;
-let currentProgressTitle = "";
-let currentProgressBaseNote = "";
+const TEXT = {
+  ready: "\u30ab\u30e1\u30e9\u3068\u30de\u30a4\u30af\u3092\u958b\u59cb\u3057\u3066\u304f\u3060\u3055\u3044",
+  startingMedia: "\u30ab\u30e1\u30e9\u3068\u30de\u30a4\u30af\u3092\u958b\u59cb\u3057\u3066\u3044\u307e\u3059",
+  mediaReady: "\u30d7\u30ec\u30d3\u30e5\u30fc\u6e96\u5099\u5b8c\u4e86",
+  mediaFailed: "\u30ab\u30e1\u30e9\u307e\u305f\u306f\u30de\u30a4\u30af\u3092\u958b\u59cb\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f",
+  sharingStart: "\u753b\u9762\u5171\u6709\u3092\u958b\u59cb\u3057\u3066\u3044\u307e\u3059",
+  sharingOn: "\u753b\u9762\u5171\u6709\u4e2d",
+  sharingOff: "\u753b\u9762\u5171\u6709\u3092\u505c\u6b62\u3057\u307e\u3057\u305f",
+  sharingFailed: "\u753b\u9762\u5171\u6709\u3092\u958b\u59cb\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f",
+  recording: "\u9332\u753b\u4e2d",
+  recordFailed: "\u9332\u753b\u3092\u958b\u59cb\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f",
+  recordStopped: "\u9332\u753b\u505c\u6b62\u3002\u4fdd\u5b58\u3067\u304d\u307e\u3059",
+  savePreparing: "MP4\u4fdd\u5b58\u306e\u6e96\u5099\u3092\u3057\u3066\u3044\u307e\u3059",
+  saving: "\u4fdd\u5b58\u30d5\u30a1\u30a4\u30eb\u3092\u6e96\u5099\u3057\u3066\u3044\u307e\u3059",
+  saveDone: "\u4fdd\u5b58\u3057\u307e\u3057\u305f",
+  saveFailed: "\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f",
+  bgNone: "\u80cc\u666f\u305d\u306e\u307e\u307e",
+  bgBlur: "\u80cc\u666f\u307c\u304b\u3057",
+  bgImage: "\u753b\u50cf\u80cc\u666f",
+  bgLoaded: "\u80cc\u666f\u753b\u50cf\u3092\u8aad\u307f\u8fbc\u307f\u307e\u3057\u305f",
+  bgFailed: "\u80cc\u666f\u753b\u50cf\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3067\u3057\u305f",
+  shareStartButton: "\u753b\u9762\u5171\u6709\u3092\u958b\u59cb",
+  shareStopButton: "\u753b\u9762\u5171\u6709\u3092\u505c\u6b62",
+  micReady: "\u30de\u30a4\u30af\u3092\u5207\u308a\u66ff\u3048\u307e\u3057\u305f",
+  micFailed: "\u30de\u30a4\u30af\u3092\u5207\u308a\u66ff\u3048\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f",
+};
 
-function setStatus(text) {
-  statusBadge.textContent = text;
+const state = {
+  cameraStream: null,
+  microphoneStream: null,
+  screenStream: null,
+  recorder: null,
+  recordedChunks: [],
+  recordedBlob: null,
+  recordedMimeType: "",
+  backgroundImage: null,
+  backgroundMode: "none",
+  segmentation: null,
+  segmentationBusy: false,
+  renderIntervalId: null,
+  mixedAudioContext: null,
+  ffmpeg: null,
+  ffmpegUtil: null,
+  recordingStartedAt: 0,
+  recordingTimerId: null,
+  canvasCaptureTrack: null,
+};
+
+function setStatus(message) {
+  elements.statusText.textContent = message;
 }
 
-function markActivity() {
-  lastActivityAt = Date.now();
+function setButtons() {
+  const hasCamera = Boolean(state.cameraStream);
+  const isRecording = state.recorder?.state === "recording";
+  const hasRecording = Boolean(state.recordedBlob);
+
+  elements.recordButton.disabled = !hasCamera || isRecording;
+  elements.stopButton.disabled = !isRecording;
+  elements.saveButton.disabled = !hasRecording || isRecording;
+  elements.shareButton.disabled = !hasCamera;
+  elements.shareButton.textContent = state.screenStream ? TEXT.shareStopButton : TEXT.shareStartButton;
 }
 
-function appendLog(text) {
-  markActivity();
-  logBox.textContent += `${text}\n`;
-  logBox.scrollTop = logBox.scrollHeight;
+function formatElapsedTime(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }
 
-function setProgress(title, percent, note) {
-  markActivity();
-  currentProgressTitle = title;
-  currentProgressBaseNote = note || "";
-  progressWrap.classList.remove("hidden");
-  progressTitle.textContent = title;
-  progressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-  progressNote.textContent = currentProgressBaseNote;
+function updateRecordingBadge() {
+  const elapsed = Date.now() - state.recordingStartedAt;
+  elements.recordingBadge.textContent = `\u9332\u753b\u4e2d ${formatElapsedTime(elapsed)}`;
 }
 
-function showFailure(message) {
-  result.classList.remove("hidden");
-  resultMessage.textContent = message;
-  logDetails.open = true;
+function startRecordingTimer() {
+  state.recordingStartedAt = Date.now();
+  updateRecordingBadge();
+  elements.recordingBadge.hidden = false;
+  stopRecordingTimer();
+  state.recordingTimerId = window.setInterval(updateRecordingBadge, 1000);
 }
 
-function sanitizeFileName(name) {
-  const safe = String(name || "podcast_episode.mp4").replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim();
-  return safe.toLowerCase().endsWith(".mp4") ? safe : `${safe || "podcast_episode"}.mp4`;
-}
-
-function parseTimeToSeconds(value) {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return null;
+function stopRecordingTimer() {
+  if (state.recordingTimerId) {
+    clearInterval(state.recordingTimerId);
+    state.recordingTimerId = null;
   }
-  if (/^\d+(\.\d+)?$/.test(raw)) {
-    return Number(raw);
-  }
-
-  const parts = raw.split(":").map((item) => Number(item));
-  if (parts.some((item) => Number.isNaN(item))) {
-    throw new Error(`時刻の書き方が正しくありません: ${value}`);
-  }
-  if (parts.length === 3) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  }
-  if (parts.length === 2) {
-    return parts[0] * 60 + parts[1];
-  }
-  throw new Error(`時刻の書き方が正しくありません: ${value}`);
 }
 
-function secondsToTimestamp(totalSeconds) {
-  const safe = Math.max(0, totalSeconds);
-  const hours = Math.floor(safe / 3600);
-  const minutes = Math.floor((safe % 3600) / 60);
-  const seconds = safe % 60;
-  const whole = Math.floor(seconds);
-  const fraction = seconds - whole;
-  const ms = Math.round(fraction * 1000);
-  const hh = String(hours).padStart(2, "0");
-  const mm = String(minutes).padStart(2, "0");
-  const ss = String(whole).padStart(2, "0");
-  if (ms === 0) {
-    return `${hh}:${mm}:${ss}`;
-  }
-  return `${hh}:${mm}:${ss}.${String(ms).padStart(3, "0")}`;
-}
-
-function buildScalePadFilter(width, height) {
-  return `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p`;
-}
-
-function formatDateString(value) {
-  if (!value) {
-    return "";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-  return date.toLocaleString("ja-JP");
-}
-
-function getAssetSourceLabel(asset) {
-  if (!asset) {
-    return "";
-  }
-  return asset.source === "bundled"
-    ? "最初から入っている標準素材"
-    : "このブラウザに保存した標準素材";
-}
-
-function applyCurrentPreset(targetName, targetMeta, asset) {
-  if (!asset) {
-    targetName.textContent = "未設定";
-    targetMeta.textContent = "";
-    return;
-  }
-  targetName.textContent = asset.name || "保存済み素材";
-  const meta = [getAssetSourceLabel(asset)];
-  if (asset.updatedAt) {
-    meta.push(`更新: ${formatDateString(asset.updatedAt)}`);
-  }
-  targetMeta.textContent = meta.join(" / ");
-}
-
-function applyDefaultHints(defaults) {
-  const bgm = defaults.bgm || null;
-  const jingle = defaults.jingle || null;
-  const introImage = defaults.introImage || null;
-  const jingleImage = defaults.jingleImage || null;
-
-  bgmHint.textContent = bgm ? `標準BGM: ${bgm.name}` : "選ばない場合は保存済みの標準BGMを使います。";
-  introHint.textContent = introImage ? `標準イントロ画像: ${introImage.name}` : "選ばない場合は保存済みの標準画像を使います。";
-  jingleHint.textContent = jingle ? `標準ジングル音源: ${jingle.name}` : "選ばない場合は保存済みの標準ジングルを使います。";
-  jingleImageHint.textContent = jingleImage ? `標準ジングル画像: ${jingleImage.name}` : "選ばない場合は保存済みの標準画像を使います。";
-
-  applyCurrentPreset(currentBgm, currentBgmMeta, bgm);
-  applyCurrentPreset(currentJingle, currentJingleMeta, jingle);
-  applyCurrentPreset(currentIntro, currentIntroMeta, introImage);
-  applyCurrentPreset(currentJingleImage, currentJingleImageMeta, jingleImage);
-
-  const names = [bgm, jingle, introImage, jingleImage].filter((item) => item?.name);
-  presetBadge.textContent = names.length ? "保存済み" : "未設定";
-}
-
-function syncJingleInputsState() {
-  const disabled = disableJingles.checked;
-  document.getElementById("jingle").disabled = disabled;
-  document.getElementById("jingleImage").disabled = disabled;
-  insertTimesList.querySelectorAll("input").forEach((input) => {
-    input.disabled = disabled;
-  });
-  addInsertTimeButton.disabled = disabled;
-}
-
-function createInsertTimeRow(value = "") {
-  insertTimeCount += 1;
-
-  const row = document.createElement("div");
-  row.className = "time-row";
-
-  const field = document.createElement("div");
-  field.className = "field";
-
-  const label = document.createElement("label");
-  label.textContent = `ジングル位置 ${insertTimeCount}`;
-
-  const hint = document.createElement("div");
-  hint.className = "hint";
-  hint.textContent = "例: 00:03:13";
-
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = value;
-  input.placeholder = "00:03:13";
-  input.className = "insert-time-input";
-
-  const removeButton = document.createElement("button");
-  removeButton.type = "button";
-  removeButton.className = "ghost-button remove";
-  removeButton.textContent = "削除";
-  removeButton.addEventListener("click", () => {
-    row.remove();
-  });
-
-  field.appendChild(label);
-  field.appendChild(hint);
-  field.appendChild(input);
-  row.appendChild(field);
-  row.appendChild(removeButton);
-  insertTimesList.appendChild(row);
-}
-
-function getInsertTimes() {
-  return Array.from(insertTimesList.querySelectorAll(".insert-time-input"))
-    .map((input) => input.value.trim())
-    .filter(Boolean);
-}
-
-function formatSecondsLabel(totalSeconds) {
-  const safe = Math.max(0, Math.floor(totalSeconds));
-  const minutes = Math.floor(safe / 60);
-  const seconds = safe % 60;
-  if (minutes > 0) {
-    return `${minutes}分${seconds}秒`;
-  }
-  return `${seconds}秒`;
-}
-
-function refreshProgressHeartbeat() {
-  if (!buildStartAt) {
+async function initializeSegmentation() {
+  if (state.segmentation) {
     return;
   }
 
-  const elapsed = formatSecondsLabel((Date.now() - buildStartAt) / 1000);
-  const idle = formatSecondsLabel((Date.now() - lastActivityAt) / 1000);
-  let note = currentProgressBaseNote || "";
-
-  if (note) {
-    note += " ";
-  }
-  note += `経過 ${elapsed} / 最終更新 ${idle}前`;
-
-  if (Date.now() - lastActivityAt >= 30000) {
-    note += " / しばらく更新がありません";
+  if (typeof SelfieSegmentation !== "function") {
+    throw new Error("SelfieSegmentation is not available");
   }
 
-  progressTitle.textContent = currentProgressTitle || "処理中...";
-  progressNote.textContent = note;
+  const segmentation = new SelfieSegmentation({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
+  });
+
+  segmentation.setOptions({ modelSelection: 1 });
+  segmentation.onResults(handleSegmentationResults);
+  state.segmentation = segmentation;
 }
 
-function startBuildWatchdog() {
-  stopBuildWatchdog();
-  buildStartAt = Date.now();
-  lastActivityAt = buildStartAt;
-  refreshProgressHeartbeat();
-  buildWatchdogId = window.setInterval(() => {
-    refreshProgressHeartbeat();
-  }, 1000);
-}
+async function setupMedia() {
+  try {
+    if (state.cameraStream) {
+      return;
+    }
 
-function stopBuildWatchdog() {
-  if (buildWatchdogId) {
-    clearInterval(buildWatchdogId);
-    buildWatchdogId = 0;
+    setStatus(TEXT.startingMedia);
+    await initializeSegmentation();
+
+    const selectedMicrophoneId = elements.microphoneSelect.value;
+    state.cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30, max: 30 },
+      },
+      audio: false,
+    });
+
+    state.microphoneStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: selectedMicrophoneId ? { exact: selectedMicrophoneId } : undefined,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      video: false,
+    });
+
+    state.microphoneStream.getAudioTracks().forEach((track) => {
+      state.cameraStream.addTrack(track);
+    });
+
+    elements.cameraVideo.srcObject = state.cameraStream;
+    await elements.cameraVideo.play();
+
+    state.recordedBlob = null;
+    state.recordedMimeType = "";
+    await populateMicrophoneDevices();
+    startRenderLoop();
+    setStatus(TEXT.mediaReady);
+    setButtons();
+  } catch (error) {
+    console.error(error);
+    setStatus(TEXT.mediaFailed);
   }
-  buildStartAt = 0;
-  lastActivityAt = 0;
 }
 
-function buildBundledAssetUrl(storedName) {
-  return new URL(`./default-assets/${storedName}`, window.location.href).toString();
+async function populateMicrophoneDevices() {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const microphoneDevices = devices.filter((device) => device.kind === "audioinput");
+  const currentValue = elements.microphoneSelect.value;
+
+  elements.microphoneSelect.innerHTML = "";
+
+  if (microphoneDevices.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "標準マイク";
+    elements.microphoneSelect.appendChild(option);
+    return;
+  }
+
+  microphoneDevices.forEach((device, index) => {
+    const option = document.createElement("option");
+    option.value = device.deviceId;
+    option.textContent = device.label || `マイク ${index + 1}`;
+    elements.microphoneSelect.appendChild(option);
+  });
+
+  if (microphoneDevices.some((device) => device.deviceId === currentValue)) {
+    elements.microphoneSelect.value = currentValue;
+  }
 }
 
-function openDatabase() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onerror = () => reject(request.error);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "key" });
+async function switchMicrophone() {
+  if (!state.cameraStream || state.recorder?.state === "recording") {
+    return;
+  }
+
+  try {
+    const selectedMicrophoneId = elements.microphoneSelect.value;
+    const nextMicrophoneStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: selectedMicrophoneId ? { exact: selectedMicrophoneId } : undefined,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      video: false,
+    });
+
+    state.cameraStream.getAudioTracks().forEach((track) => {
+      state.cameraStream.removeTrack(track);
+      track.stop();
+    });
+
+    if (state.microphoneStream) {
+      state.microphoneStream.getTracks().forEach((track) => track.stop());
+    }
+
+    state.microphoneStream = nextMicrophoneStream;
+    state.microphoneStream.getAudioTracks().forEach((track) => {
+      state.cameraStream.addTrack(track);
+    });
+
+    await populateMicrophoneDevices();
+    setStatus(TEXT.micReady);
+  } catch (error) {
+    console.error(error);
+    setStatus(TEXT.micFailed);
+  }
+}
+
+async function toggleScreenShare() {
+  if (state.screenStream) {
+    stopScreenShare();
+    return;
+  }
+
+  try {
+    setStatus(TEXT.sharingStart);
+    state.screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        frameRate: { ideal: 30, max: 30 },
+      },
+      audio: true,
+    });
+
+    const [screenTrack] = state.screenStream.getVideoTracks();
+    if (screenTrack) {
+      screenTrack.addEventListener("ended", stopScreenShare, { once: true });
+    }
+
+    elements.screenVideo.srcObject = state.screenStream;
+    await elements.screenVideo.play();
+    setStatus(TEXT.sharingOn);
+    setButtons();
+  } catch (error) {
+    console.error(error);
+    setStatus(TEXT.sharingFailed);
+  }
+}
+
+function stopScreenShare() {
+  if (!state.screenStream) {
+    return;
+  }
+
+  state.screenStream.getTracks().forEach((track) => track.stop());
+  state.screenStream = null;
+  elements.screenVideo.srcObject = null;
+  setStatus(TEXT.sharingOff);
+  setButtons();
+}
+
+function drawRoundedFrame(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function drawCoverImage(ctx, image, targetWidth, targetHeight) {
+  const targetRatio = targetWidth / targetHeight;
+  const imageRatio = image.width / image.height;
+  let sx = 0;
+  let sy = 0;
+  let sw = image.width;
+  let sh = image.height;
+
+  if (imageRatio > targetRatio) {
+    sw = image.height * targetRatio;
+    sx = (image.width - sw) / 2;
+  } else {
+    sh = image.width / targetRatio;
+    sy = (image.height - sh) / 2;
+  }
+
+  ctx.drawImage(image, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
+}
+
+function redrawCameraCanvasWithoutSegmentation() {
+  const { width, height } = elements.cameraCanvas;
+  cameraCtx.clearRect(0, 0, width, height);
+
+  if (state.backgroundMode === "image" && state.backgroundImage) {
+    drawCoverImage(cameraCtx, state.backgroundImage, width, height);
+    if (elements.cameraVideo.readyState >= 2) {
+      cameraCtx.drawImage(elements.cameraVideo, 0, 0, width, height);
+    }
+    return;
+  }
+
+  if (elements.cameraVideo.readyState >= 2) {
+    cameraCtx.drawImage(elements.cameraVideo, 0, 0, width, height);
+  }
+}
+
+function handleSegmentationResults(results) {
+  const { width, height } = elements.cameraCanvas;
+
+  personCtx.clearRect(0, 0, width, height);
+  personCtx.drawImage(results.segmentationMask, 0, 0, width, height);
+  personCtx.globalCompositeOperation = "source-in";
+  personCtx.drawImage(elements.cameraVideo, 0, 0, width, height);
+  personCtx.globalCompositeOperation = "source-over";
+
+  cameraCtx.clearRect(0, 0, width, height);
+
+  if (state.backgroundMode === "blur") {
+    cameraCtx.filter = "blur(18px)";
+    cameraCtx.drawImage(elements.cameraVideo, 0, 0, width, height);
+    cameraCtx.filter = "none";
+    cameraCtx.drawImage(elements.personCanvas, 0, 0, width, height);
+  } else if (state.backgroundMode === "image" && state.backgroundImage) {
+    drawCoverImage(cameraCtx, state.backgroundImage, width, height);
+    cameraCtx.drawImage(elements.personCanvas, 0, 0, width, height);
+  } else {
+    cameraCtx.drawImage(elements.cameraVideo, 0, 0, width, height);
+  }
+
+  state.segmentationBusy = false;
+}
+
+function composePreview() {
+  const { width, height } = elements.previewCanvas;
+  previewCtx.clearRect(0, 0, width, height);
+
+  if (state.screenStream && elements.screenVideo.readyState >= 2) {
+    previewCtx.drawImage(elements.screenVideo, 0, 0, width, height);
+
+    const insetWidth = width * 0.28;
+    const insetHeight = insetWidth * 9 / 16;
+    const insetX = width - insetWidth - 40;
+    const insetY = height - insetHeight - 40;
+
+    previewCtx.save();
+    drawRoundedFrame(previewCtx, insetX, insetY, insetWidth, insetHeight, 24);
+    previewCtx.clip();
+    previewCtx.drawImage(elements.cameraCanvas, insetX, insetY, insetWidth, insetHeight);
+    previewCtx.restore();
+
+    previewCtx.lineWidth = 4;
+    previewCtx.strokeStyle = "rgba(255, 248, 238, 0.92)";
+    drawRoundedFrame(previewCtx, insetX, insetY, insetWidth, insetHeight, 24);
+    previewCtx.stroke();
+    return;
+  }
+
+  previewCtx.drawImage(elements.cameraCanvas, 0, 0, width, height);
+}
+
+async function renderFrame() {
+  if (!state.cameraStream) {
+    return;
+  }
+
+  if (elements.cameraVideo.readyState >= 2) {
+    if (state.segmentation && !state.segmentationBusy) {
+      state.segmentationBusy = true;
+      state.segmentation.send({ image: elements.cameraVideo }).catch((error) => {
+        console.error(error);
+        state.segmentationBusy = false;
+        redrawCameraCanvasWithoutSegmentation();
+      });
+    } else if (!state.segmentation) {
+      redrawCameraCanvasWithoutSegmentation();
+    }
+  }
+
+  composePreview();
+  if (state.canvasCaptureTrack?.requestFrame) {
+    state.canvasCaptureTrack.requestFrame();
+  }
+}
+
+function startRenderLoop() {
+  if (state.renderIntervalId) {
+    clearInterval(state.renderIntervalId);
+  }
+
+  renderFrame().catch((error) => {
+    console.error(error);
+  });
+
+  state.renderIntervalId = window.setInterval(() => {
+    renderFrame().catch((error) => {
+      console.error(error);
+    });
+  }, 1000 / 30);
+}
+
+async function buildAudioStream() {
+  const micTracks = state.microphoneStream ? state.microphoneStream.getAudioTracks().filter((track) => track.readyState === "live" && track.enabled) : [];
+  const shareTracks = state.screenStream ? state.screenStream.getAudioTracks().filter((track) => track.readyState === "live" && track.enabled) : [];
+
+  if (micTracks.length === 0 && shareTracks.length === 0) {
+    return new MediaStream();
+  }
+
+  if (shareTracks.length === 0 && micTracks.length > 0) {
+    return new MediaStream([micTracks[0]]);
+  }
+
+  const audioContext = new AudioContext();
+  await audioContext.resume();
+  const destination = audioContext.createMediaStreamDestination();
+
+  micTracks.forEach((track) => {
+    const source = audioContext.createMediaStreamSource(new MediaStream([track]));
+    const gain = audioContext.createGain();
+    gain.gain.value = 1.25;
+    source.connect(gain).connect(destination);
+  });
+
+  shareTracks.forEach((track) => {
+    const source = audioContext.createMediaStreamSource(new MediaStream([track]));
+    const gain = audioContext.createGain();
+    gain.gain.value = 1;
+    source.connect(gain).connect(destination);
+  });
+
+  state.mixedAudioContext = audioContext;
+  return destination.stream;
+}
+
+function buildRecorderOptions() {
+  const mimeTypes = [
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4;codecs=h264,aac",
+    "video/mp4",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+  ];
+
+  const options = {
+    videoBitsPerSecond: 8_000_000,
+    audioBitsPerSecond: 192_000,
+  };
+
+  const supported = mimeTypes.find((type) => MediaRecorder.isTypeSupported(type));
+  if (supported) {
+    options.mimeType = supported;
+  }
+
+  return options;
+}
+
+async function startRecording() {
+  if (!state.cameraStream) {
+    await setupMedia();
+  }
+
+  if (!state.cameraStream) {
+    return;
+  }
+
+  try {
+    state.recordedChunks = [];
+    state.recordedBlob = null;
+    state.recordedMimeType = "";
+    elements.saveButton.disabled = true;
+
+    const canvasStream = elements.previewCanvas.captureStream(30);
+    state.canvasCaptureTrack = canvasStream.getVideoTracks()[0] || null;
+    const audioStream = await buildAudioStream();
+    const outputStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...audioStream.getAudioTracks(),
+    ]);
+
+    const recorderOptions = buildRecorderOptions();
+    state.recorder = new MediaRecorder(outputStream, recorderOptions);
+    state.recordedMimeType = recorderOptions.mimeType || "video/webm";
+
+    state.recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        state.recordedChunks.push(event.data);
       }
     };
-    request.onsuccess = () => resolve(request.result);
-  });
-}
 
-async function saveDefaultAsset(key, file) {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, "readwrite");
-    transaction.onerror = () => reject(transaction.error);
-    transaction.oncomplete = () => resolve();
-    transaction.objectStore(STORE_NAME).put({
-      key,
-      name: file.name,
-      type: file.type,
-      updatedAt: new Date().toISOString(),
-      blob: file
-    });
-  });
-}
+    state.recorder.onstop = async () => {
+      const mimeType = state.recordedChunks[0]?.type || state.recordedMimeType || "video/webm";
+      state.recordedMimeType = mimeType;
+      state.recordedBlob = new Blob(state.recordedChunks, { type: mimeType });
+      stopRecordingTimer();
+      elements.recordingBadge.hidden = true;
+      state.canvasCaptureTrack = null;
 
-async function loadDefaultAsset(key) {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, "readonly");
-    transaction.onerror = () => reject(transaction.error);
-    const request = transaction.objectStore(STORE_NAME).get(key);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result ? { ...request.result, source: "saved" } : null);
-  });
-}
-
-async function loadBundledDefaultsManifest() {
-  if (!bundledDefaultsPromise) {
-    bundledDefaultsPromise = fetch(BUNDLED_DEFAULTS_URL, { cache: "no-store" }).then(async (response) => {
-      if (!response.ok) {
-        throw new Error("標準素材の情報を読み込めませんでした。");
+      if (state.mixedAudioContext) {
+        await state.mixedAudioContext.close();
+        state.mixedAudioContext = null;
       }
-      return response.json();
-    });
-  }
-  return bundledDefaultsPromise;
-}
 
-async function loadBundledAsset(key) {
-  const manifest = await loadBundledDefaultsManifest().catch(() => null);
-  const entry = manifest?.[key];
-  if (!entry?.storedName) {
-    return null;
-  }
-  return {
-    key,
-    name: entry.originalName || entry.storedName,
-    type: entry.type || "",
-    updatedAt: entry.updatedAt || "",
-    url: buildBundledAssetUrl(entry.storedName),
-    source: "bundled"
-  };
-}
+      setStatus(TEXT.recordStopped);
+      setButtons();
+    };
 
-async function loadPreferredDefault(key) {
-  try {
-    const saved = await loadDefaultAsset(key);
-    if (saved) {
-      return saved;
-    }
+    state.recorder.start(1000);
+    startRecordingTimer();
+    setStatus(TEXT.recording);
+    setButtons();
   } catch (error) {
-    console.warn(`Failed to read saved default asset: ${key}`, error);
-  }
+    console.error(error);
+    stopRecordingTimer();
+    elements.recordingBadge.hidden = true;
+    state.canvasCaptureTrack = null;
 
-  try {
-    return await loadBundledAsset(key);
-  } catch (error) {
-    console.warn(`Failed to read bundled default asset: ${key}`, error);
-    return null;
-  }
-}
-
-async function loadAllDefaults() {
-  const entries = await Promise.all(ASSET_KEYS.map((key) => loadPreferredDefault(key)));
-  return Object.fromEntries(ASSET_KEYS.map((key, index) => [key, entries[index]]));
-}
-
-async function getDurationSeconds(file) {
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    return await new Promise((resolve, reject) => {
-      const video = document.createElement("video");
-      video.preload = "metadata";
-      video.onloadedmetadata = () => resolve(video.duration);
-      video.onerror = () => reject(new Error("本編動画の長さを読み取れませんでした。"));
-      video.src = objectUrl;
-    });
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
-async function defaultAssetToFile(defaultAsset, requiredLabel) {
-  if (defaultAsset?.blob) {
-    return new File([defaultAsset.blob], defaultAsset.name || `${requiredLabel}.bin`, {
-      type: defaultAsset.type || defaultAsset.blob.type || "application/octet-stream"
-    });
-  }
-  if (defaultAsset?.url) {
-    const response = await fetch(defaultAsset.url, { cache: "force-cache" });
-    if (!response.ok) {
-      throw new Error(`${requiredLabel} を読み込めませんでした。`);
+    if (state.mixedAudioContext) {
+      await state.mixedAudioContext.close().catch(() => {});
+      state.mixedAudioContext = null;
     }
-    const blob = await response.blob();
-    return new File([blob], defaultAsset.name || `${requiredLabel}.bin`, {
-      type: defaultAsset.type || blob.type || "application/octet-stream"
-    });
-  }
-  throw new Error(`${requiredLabel} がありません。`);
-}
 
-async function pickAsset(runFile, defaultAsset, requiredLabel) {
-  if (runFile) {
-    return runFile;
-  }
-  if (defaultAsset) {
-    return defaultAssetToFile(defaultAsset, requiredLabel);
-  }
-  throw new Error(`${requiredLabel} がありません。`);
-}
-
-function getFileExtension(file) {
-  const fromName = String(file?.name || "").match(/(\.[A-Za-z0-9]+)$/);
-  if (fromName) {
-    return fromName[1].toLowerCase();
-  }
-
-  const byMime = {
-    "audio/mpeg": ".mp3",
-    "audio/mp3": ".mp3",
-    "audio/wav": ".wav",
-    "audio/x-wav": ".wav",
-    "audio/aac": ".aac",
-    "audio/mp4": ".m4a",
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp"
-  };
-  return byMime[file?.type] || "";
-}
-
-function buildVirtualName(baseName, file) {
-  return `${baseName}${getFileExtension(file)}`;
-}
-
-async function withTimeout(promise, timeoutMs, message) {
-  let timerId = null;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timerId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
-      })
-    ]);
-  } finally {
-    if (timerId !== null) {
-      clearTimeout(timerId);
-    }
+    setStatus(TEXT.recordFailed);
   }
 }
 
-async function loadFfmpegLib() {
-  if (!ffmpegLibPromise) {
-    appendLog("[setup] Loading ffmpeg browser libraries");
-    ffmpegLibPromise = Promise.all([
-      import("https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js"),
-      import("https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js")
-    ]);
+function stopRecording() {
+  if (state.recorder?.state === "recording") {
+    state.recorder.stop();
   }
-  return ffmpegLibPromise;
 }
 
 async function ensureFfmpeg() {
-  if (ffmpegState?.ready) {
-    return ffmpegState;
+  if (state.ffmpeg && state.ffmpegUtil) {
+    return { ffmpeg: state.ffmpeg, util: state.ffmpegUtil };
   }
 
-  setStatus("準備中...");
-  setProgress("動画エンジンを読み込み中...", 3, "最初の1回だけ少し時間がかかります。");
-
-  const [{ FFmpeg }, { toBlobURL }] = await withTimeout(
-    loadFfmpegLib(),
-    FFMPEG_TIMEOUT_MS,
-    "動画エンジンの読み込みが止まりました。ページを再読み込みして、もう一度試してください。"
-  );
+  setStatus(TEXT.savePreparing);
+  const [{ FFmpeg }, util] = await Promise.all([
+    import("https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/ffmpeg.js"),
+    import("https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js"),
+  ]);
 
   const ffmpeg = new FFmpeg();
   const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
-  let currentStage = { title: "準備中...", start: 0, end: 0, note: "" };
 
-  appendLog("[setup] Preparing ffmpeg core");
-
-  ffmpeg.on("log", ({ message }) => {
-    appendLog(message);
+  await ffmpeg.load({
+    coreURL: await util.toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+    wasmURL: await util.toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
   });
 
-  ffmpeg.on("progress", ({ progress }) => {
-    if (typeof progress !== "number") {
+  state.ffmpeg = ffmpeg;
+  state.ffmpegUtil = util;
+  return { ffmpeg, util };
+}
+
+function triggerDownload(blob, extension) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `podcast-${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url);
+    anchor.remove();
+  }, 1000);
+}
+
+async function saveViaFilePicker(blob, extension) {
+  if (typeof window.showSaveFilePicker !== "function") {
+    return false;
+  }
+
+  const handle = await window.showSaveFilePicker({
+    suggestedName: `podcast-${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`,
+    types: [
+      {
+        description: extension.toUpperCase(),
+        accept: {
+          [blob.type || "application/octet-stream"]: [`.${extension}`],
+        },
+      },
+    ],
+  });
+
+  const writable = await handle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+  return true;
+}
+
+async function saveOriginalRecording() {
+  const extension = state.recordedMimeType.includes("webm") ? "webm" : "mp4";
+  const saved = await saveViaFilePicker(state.recordedBlob, extension).catch(() => false);
+  if (!saved) {
+    triggerDownload(state.recordedBlob, extension);
+  }
+}
+
+async function saveRecording() {
+  if (!state.recordedBlob) {
+    return;
+  }
+
+  try {
+    setStatus(TEXT.saving);
+    elements.saveButton.disabled = true;
+
+    if (state.recordedMimeType.includes("mp4")) {
+      const savedMp4 = await saveViaFilePicker(state.recordedBlob, "mp4").catch(() => false);
+      if (!savedMp4) {
+        triggerDownload(state.recordedBlob, "mp4");
+      }
+      setStatus(TEXT.saveDone);
       return;
     }
-    const percent = currentStage.start + (currentStage.end - currentStage.start) * progress;
-    setProgress(currentStage.title, percent, currentStage.note);
-  });
 
-  const coreURL = await withTimeout(
-    toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-    FFMPEG_TIMEOUT_MS,
-    "動画エンジンの準備で止まりました。ページを再読み込みして、もう一度試してください。"
-  );
-  const wasmURL = await withTimeout(
-    toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-    FFMPEG_TIMEOUT_MS,
-    "動画エンジン本体の取得で止まりました。ページを再読み込みして、もう一度試してください。"
-  );
-  const classWorkerURL = new URL("./vendor/ffmpeg/worker.js", window.location.href).toString();
-
-  appendLog("[setup] Starting ffmpeg core");
-  await withTimeout(
-    ffmpeg.load({
-      coreURL,
-      wasmURL,
-      classWorkerURL
-    }),
-    FFMPEG_TIMEOUT_MS,
-    "動画エンジンの起動が2分以上止まっています。ページを再読み込みして再実行してください。"
-  );
-  appendLog("[setup] ffmpeg ready");
-
-  ffmpegState = {
-    ready: true,
-    ffmpeg,
-    setStage(stage) {
-      currentStage = stage;
-      setProgress(stage.title, stage.start, stage.note);
-    }
-  };
-
-  setStatus("準備できました");
-  return ffmpegState;
-}
-
-async function writeBlob(ffmpeg, path, blob) {
-  const buffer = new Uint8Array(await blob.arrayBuffer());
-  await ffmpeg.writeFile(path, buffer);
-}
-
-async function execStage(runtime, stage, args) {
-  runtime.setStage(stage);
-  appendLog(`[run] ${stage.title}`);
-  appendLog(args.join(" "));
-  await runtime.ffmpeg.exec(args);
-}
-
-async function buildMainSegment(runtime, options) {
-  const {
-    mainPath,
-    bgmPath,
-    scalePad,
-    outputPath,
-    start,
-    duration,
-    stage
-  } = options;
-
-  const hasTrim = typeof start === "number" || typeof duration === "number";
-  const trimStart = typeof start === "number" ? Math.max(0, start) : 0;
-  const trimDuration = typeof duration === "number" ? Math.max(0, duration) : null;
-
-  const videoFilters = [];
-  const audioFilters = [];
-
-  if (hasTrim) {
-    const trimArgs = [`start=${trimStart}`];
-    if (trimDuration !== null) {
-      trimArgs.push(`duration=${trimDuration}`);
-    }
-    videoFilters.push(`trim=${trimArgs.join(":")}`, "setpts=PTS-STARTPTS");
-    audioFilters.push(`atrim=${trimArgs.join(":")}`, "asetpts=PTS-STARTPTS");
-  }
-
-  const mainVideoChain = videoFilters.length
-    ? `[0:v]${videoFilters.join(",")}[vout]`
-    : "[0:v]setpts=PTS-STARTPTS[vout]";
-  const mainAudioChain = audioFilters.length
-    ? `[0:a]${audioFilters.join(",")},aformat=sample_rates=48000:channel_layouts=stereo[main]`
-    : "[0:a]aformat=sample_rates=48000:channel_layouts=stereo[main]";
-  const bgmChain = "[1:a]volume=0.1,aformat=sample_rates=48000:channel_layouts=stereo[bgm]";
-  const mixChain = "[main][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]";
-
-  const args = ["-y"];
-
-  args.push(
-    "-i", mainPath,
-    "-stream_loop", "-1",
-    "-i", bgmPath,
-    "-filter_complex",
-    `${mainVideoChain};${mainAudioChain};${bgmChain};${mixChain}`,
-    "-map", "[vout]",
-    "-map", "[aout]",
-    "-vf", scalePad,
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-threads", "1",
-    "-c:a", "aac",
-    "-b:a", "128k",
-    "-pix_fmt", "yuv420p",
-    "-r", "30",
-    "-ar", "48000",
-    "-ac", "2",
-    "-shortest",
-    outputPath
-  );
-
-  await execStage(runtime, stage, args);
-}
-
-async function buildPodcast(files, defaults) {
-  const runtime = await ensureFfmpeg();
-  const runId = `job_${Date.now()}_${++buildCounter}`;
-  const scalePad = buildScalePadFilter(1280, 720);
-  const outputName = sanitizeFileName(document.getElementById("outputName").value);
-  const mainVideo = files.mainVideo;
-  const bgm = await pickAsset(files.bgm, defaults.bgm, "BGM");
-  const introImage = await pickAsset(files.introImage, defaults.introImage, "イントロ画像");
-  const useJingles = !disableJingles.checked;
-  const jingle = useJingles ? await pickAsset(files.jingle, defaults.jingle, "ジングル音源") : null;
-  const jingleImage = useJingles ? await pickAsset(files.jingleImage, defaults.jingleImage, "ジングル画像") : null;
-  const insertTimes = useJingles ? getInsertTimes().map(parseTimeToSeconds) : [];
-  const mainDuration = await getDurationSeconds(mainVideo);
-
-  if (useJingles && insertTimes.some((item) => item <= 0 || item >= mainDuration)) {
-    throw new Error("ジングル位置が動画の長さを超えています。");
-  }
-
-  const mainPath = `${runId}_main.mp4`;
-  const bgmPath = buildVirtualName(`${runId}_bgm`, bgm);
-  const introImagePath = buildVirtualName(`${runId}_intro`, introImage);
-  const mainOut = `${runId}_main_full.mp4`;
-  const introOut = `${runId}_intro.mp4`;
-  const jinglePath = useJingles ? buildVirtualName(`${runId}_jingle`, jingle) : "";
-  const jingleImagePath = useJingles ? buildVirtualName(`${runId}_jingle_image`, jingleImage) : "";
-  const jingleOut = `${runId}_jingle.mp4`;
-  const concatListPath = `${runId}_concat.txt`;
-  const finalPath = `${runId}_${outputName}`;
-
-  await writeBlob(runtime.ffmpeg, mainPath, mainVideo);
-  await writeBlob(runtime.ffmpeg, bgmPath, bgm);
-  await writeBlob(runtime.ffmpeg, introImagePath, introImage);
-  if (useJingles) {
-    await writeBlob(runtime.ffmpeg, jinglePath, jingle);
-    await writeBlob(runtime.ffmpeg, jingleImagePath, jingleImage);
-  }
-
-  await execStage(runtime, {
-    title: "イントロ動画を作成中...",
-    start: 6,
-    end: 16,
-    note: "イントロ画像とBGMを重ねています。"
-  }, [
-    "-y",
-    "-loop", "1",
-    "-i", introImagePath,
-    "-stream_loop", "-1",
-    "-i", bgmPath,
-    "-t", "8",
-    "-filter_complex", "[1:a]volume=1,afade=t=in:st=0:d=2,aformat=sample_rates=48000:channel_layouts=stereo[a]",
-    "-map", "0:v:0",
-    "-map", "[a]",
-    "-vf", scalePad,
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-threads", "1",
-    "-c:a", "aac",
-    "-b:a", "128k",
-    "-pix_fmt", "yuv420p",
-    "-r", "30",
-    "-ar", "48000",
-    "-ac", "2",
-    "-shortest",
-    introOut
-  ]);
-
-  const clips = [introOut];
-
-  if (useJingles) {
-    await execStage(runtime, {
-      title: "ジングルを作成中...",
-      start: 16,
-      end: 24,
-      note: "ジングル画像と音声を組み合わせています。"
-    }, [
+    const { ffmpeg, util } = await ensureFfmpeg();
+    await ffmpeg.writeFile("input.webm", await util.fetchFile(state.recordedBlob));
+    await ffmpeg.exec([
       "-y",
-      "-loop", "1",
-      "-i", jingleImagePath,
-      "-i", jinglePath,
-      "-t", "4",
-      "-filter_complex", "[1:a]volume=0.4,aformat=sample_rates=48000:channel_layouts=stereo[a]",
+      "-i", "input.webm",
       "-map", "0:v:0",
-      "-map", "[a]",
-      "-vf", scalePad,
+      "-map", "0:a:0?",
       "-c:v", "libx264",
-      "-preset", "ultrafast",
-      "-threads", "1",
-      "-c:a", "aac",
-      "-b:a", "128k",
+      "-preset", "veryfast",
       "-pix_fmt", "yuv420p",
-      "-r", "30",
+      "-c:a", "aac",
+      "-b:a", "192k",
       "-ar", "48000",
       "-ac", "2",
       "-shortest",
-      jingleOut
+      "podcast-recording.mp4",
     ]);
 
-    const boundaries = [0, ...insertTimes.sort((a, b) => a - b), mainDuration];
-    const segmentJobs = [];
-
-    for (let i = 0; i < boundaries.length - 1; i += 1) {
-      const start = boundaries[i];
-      const end = boundaries[i + 1];
-      let cursor = start;
-
-      while (cursor < end - 0.001) {
-        const nextEnd = Math.min(end, cursor + DIRECT_SEGMENT_LIMIT_SECONDS);
-        const duration = Math.max(0, nextEnd - cursor);
-        if (duration <= 0.001) {
-          break;
-        }
-        segmentJobs.push({
-          segmentPath: `${runId}_segment_${String(segmentJobs.length + 1).padStart(2, "0")}.mp4`,
-          start: cursor,
-          duration,
-          insertJingleAfter: false
-        });
-        cursor = nextEnd;
-      }
-
-      if (i < boundaries.length - 2 && segmentJobs.length) {
-        segmentJobs[segmentJobs.length - 1].insertJingleAfter = true;
-      }
-    }
-
-    for (let i = 0; i < segmentJobs.length; i += 1) {
-      const job = segmentJobs[i];
-      await buildMainSegment(runtime, {
-        mainPath,
-        bgmPath,
-        scalePad,
-        outputPath: job.segmentPath,
-        start: job.start,
-        duration: job.duration,
-        stage: {
-          title: `本編を作成中... (${i + 1}/${segmentJobs.length})`,
-          start: 24 + (66 / Math.max(1, segmentJobs.length)) * i,
-          end: 24 + (66 / Math.max(1, segmentJobs.length)) * (i + 1),
-          note: "本編を少しずつ処理しています。"
-        }
-      });
-      clips.push(job.segmentPath);
-      if (job.insertJingleAfter) {
-        clips.push(jingleOut);
-      }
-    }
-  } else if (mainDuration <= DIRECT_SEGMENT_LIMIT_SECONDS) {
-    await buildMainSegment(runtime, {
-      mainPath,
-      bgmPath,
-      scalePad,
-      outputPath: mainOut,
-      stage: {
-        title: "本編にBGMを重ねています...",
-        start: 16,
-        end: 90,
-        note: "本編をまとめて処理しています。"
-      }
-    });
-    clips.push(mainOut);
-  } else {
-    const segmentCount = Math.ceil(mainDuration / DIRECT_SEGMENT_LIMIT_SECONDS);
-    for (let i = 0; i < segmentCount; i += 1) {
-      const start = i * DIRECT_SEGMENT_LIMIT_SECONDS;
-      const duration = Math.min(DIRECT_SEGMENT_LIMIT_SECONDS, mainDuration - start);
-      const segmentPath = `${runId}_segment_${String(i + 1).padStart(2, "0")}.mp4`;
-      await buildMainSegment(runtime, {
-        mainPath,
-        bgmPath,
-        scalePad,
-        outputPath: segmentPath,
-        start,
-        duration,
-        stage: {
-          title: `本編にBGMを重ねています... (${i + 1}/${segmentCount})`,
-          start: 16 + (74 / segmentCount) * i,
-          end: 16 + (74 / segmentCount) * (i + 1),
-          note: "長い動画なので分けて処理しています。"
-        }
-      });
-      clips.push(segmentPath);
-    }
-  }
-
-  const concatBody = clips.map((clip) => `file '${clip}'`).join("\n");
-  await runtime.ffmpeg.writeFile(concatListPath, new TextEncoder().encode(`${concatBody}\n`));
-
-  await execStage(runtime, {
-    title: "最後に1本へまとめています...",
-    start: 90,
-    end: 100,
-    note: "書き出し用のMP4を作成しています。"
-  }, [
-    "-y",
-    "-f", "concat",
-    "-safe", "0",
-    "-i", concatListPath,
-    "-c", "copy",
-    "-movflags", "+faststart",
-    finalPath
-  ]);
-
-  return { data: await runtime.ffmpeg.readFile(finalPath), outputName };
-}
-
-async function refreshDefaults() {
-  try {
-    const defaults = await loadAllDefaults();
-    applyDefaultHints(defaults);
-  } catch (error) {
-    applyDefaultHints({});
-    presetNote.textContent = error?.message || "標準素材の読み込みに失敗しました。";
-  }
-}
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  result.classList.remove("hidden");
-  resultLinkWrap.classList.add("hidden");
-  previewWrap.classList.add("hidden");
-  logDetails.open = true;
-  logBox.textContent = "";
-  resultMessage.textContent = "作成を開始しました。";
-  progressWrap.classList.remove("hidden");
-  buildButton.disabled = true;
-  buildButton.textContent = "作成中...";
-  setStatus("作成中...");
-  startBuildWatchdog();
-  appendLog("[setup] Build started");
-
-  try {
-    if (outputObjectUrl) {
-      URL.revokeObjectURL(outputObjectUrl);
-      outputObjectUrl = "";
-    }
-
-    const defaults = await loadAllDefaults();
-    const mainVideo = document.getElementById("mainVideo").files[0];
-    if (!mainVideo) {
-      throw new Error("本編動画を選んでください。");
-    }
-
-    const files = {
-      mainVideo,
-      bgm: document.getElementById("bgm").files[0] || null,
-      introImage: document.getElementById("introImage").files[0] || null,
-      jingle: document.getElementById("jingle").files[0] || null,
-      jingleImage: document.getElementById("jingleImage").files[0] || null
-    };
-
-    const { data, outputName } = await buildPodcast(files, defaults);
+    const data = await ffmpeg.readFile("podcast-recording.mp4");
     const blob = new Blob([data], { type: "video/mp4" });
-    outputObjectUrl = URL.createObjectURL(blob);
-
-    resultMessage.textContent = "作成が完了しました。";
-    resultLink.href = outputObjectUrl;
-    resultLink.download = outputName;
-    resultLinkWrap.classList.remove("hidden");
-    previewVideo.src = outputObjectUrl;
-    previewWrap.classList.remove("hidden");
-    setProgress("作成完了", 100, "必要ならこのまま動画を保存してください。");
-    setStatus("完了");
-  } catch (error) {
-    const message = error?.message || "作成に失敗しました。";
-    showFailure(message);
-    setProgress("失敗しました", 100, "詳細ログを開くと原因を確認できます。");
-    setStatus("失敗");
-  } finally {
-    stopBuildWatchdog();
-    buildButton.disabled = false;
-    buildButton.textContent = "MP4を作成する";
-  }
-});
-
-presetForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  presetButton.disabled = true;
-  presetButton.textContent = "保存中...";
-
-  try {
-    const files = {
-      bgm: document.getElementById("presetBgm").files[0],
-      jingle: document.getElementById("presetJingle").files[0],
-      introImage: document.getElementById("presetIntroImage").files[0],
-      jingleImage: document.getElementById("presetJingleImage").files[0]
-    };
-
-    const updated = [];
-    for (const [key, file] of Object.entries(files)) {
-      if (file) {
-        await saveDefaultAsset(key, file);
-        updated.push(key);
-      }
+    const savedConverted = await saveViaFilePicker(blob, "mp4").catch(() => false);
+    if (!savedConverted) {
+      triggerDownload(blob, "mp4");
     }
 
-    await refreshDefaults();
-    presetForm.reset();
-    presetNote.textContent = updated.length
-      ? `保存しました: ${updated.join(", ")}`
-      : "新しく保存した素材はありません。";
+    await ffmpeg.deleteFile("input.webm").catch(() => {});
+    await ffmpeg.deleteFile("podcast-recording.mp4").catch(() => {});
+    setStatus(TEXT.saveDone);
   } catch (error) {
-    presetNote.textContent = error?.message || "標準素材の保存に失敗しました。";
+    console.error(error);
+    await saveOriginalRecording();
+    setStatus("MP4保存に失敗したため、元の録画を保存しました");
   } finally {
-    presetButton.disabled = false;
-    presetButton.textContent = "標準素材を保存する";
+    setButtons();
+  }
+}
+
+function loadBackgroundImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+elements.setupButton.addEventListener("click", setupMedia);
+elements.recordButton.addEventListener("click", startRecording);
+elements.stopButton.addEventListener("click", stopRecording);
+elements.saveButton.addEventListener("click", saveRecording);
+elements.shareButton.addEventListener("click", toggleScreenShare);
+elements.microphoneSelect.addEventListener("change", switchMicrophone);
+
+elements.backgroundMode.addEventListener("change", (event) => {
+  state.backgroundMode = event.target.value;
+
+  if (state.backgroundMode === "none") {
+    setStatus(TEXT.bgNone);
+  } else if (state.backgroundMode === "blur") {
+    setStatus(TEXT.bgBlur);
+  } else {
+    setStatus(TEXT.bgImage);
+  }
+
+  redrawCameraCanvasWithoutSegmentation();
+});
+
+elements.backgroundImageInput.addEventListener("change", async (event) => {
+  const [file] = event.target.files;
+  if (!file) {
+    state.backgroundImage = null;
+    return;
+  }
+
+  try {
+    state.backgroundImage = await loadBackgroundImage(file);
+    state.backgroundMode = "image";
+    elements.backgroundMode.value = "image";
+    redrawCameraCanvasWithoutSegmentation();
+    setStatus(TEXT.bgLoaded);
+  } catch (error) {
+    console.error(error);
+    setStatus(TEXT.bgFailed);
   }
 });
 
-addInsertTimeButton.addEventListener("click", () => {
-  createInsertTimeRow("");
-  syncJingleInputsState();
+setButtons();
+setStatus(TEXT.ready);
+populateMicrophoneDevices().catch(() => {});
+navigator.mediaDevices?.addEventListener?.("devicechange", () => {
+  populateMicrophoneDevices().catch(() => {});
 });
-
-disableJingles.addEventListener("change", syncJingleInputsState);
-
-createInsertTimeRow("00:03:13");
-createInsertTimeRow("00:11:29");
-syncJingleInputsState();
-refreshDefaults();
-setStatus("ブラウザだけで作成できます");
