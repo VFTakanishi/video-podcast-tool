@@ -419,7 +419,6 @@ async function ensureFfmpeg() {
 
   const ffmpeg = new FFmpeg();
   const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
-  const workerBaseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm";
   let currentStage = { title: "準備中...", start: 0, end: 0, note: "" };
 
   appendLog("[setup] Preparing ffmpeg core");
@@ -446,11 +445,7 @@ async function ensureFfmpeg() {
     FFMPEG_TIMEOUT_MS,
     "動画エンジン本体の取得で止まりました。ページを再読み込みして、もう一度試してください。"
   );
-  const classWorkerURL = await withTimeout(
-    toBlobURL(`${workerBaseURL}/worker.js`, "text/javascript"),
-    FFMPEG_TIMEOUT_MS,
-    "動画エンジンの起動準備で止まりました。ページを再読み込みして、もう一度試してください。"
-  );
+  const classWorkerURL = new URL("./vendor/ffmpeg/worker.js", window.location.href).toString();
 
   appendLog("[setup] Starting ffmpeg core");
   await withTimeout(
