@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ビデオポッドキャスト作成ツール</title>
+    <style>
+      :root {
+        --bg: #f6efe5;
+        --panel: rgba(255, 252, 248, 0.92);
+        --ink: #1f1b18;
+        --muted: #6f6358;
+        --accent: #cb5f2c;
+        --accent-2: #254f45;
+        --line: rgba(31, 27, 24, 0.12);
+        --danger: #9c2f23;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Trebuchet MS", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(203, 95, 44, 0.16), transparent 28%),
+          radial-gradient(circle at bottom right, rgba(37, 79, 69, 0.18), transparent 30%),
+          linear-gradient(180deg, #f8f1e9 0%, #f1e4d2 100%);
+        padding: 32px 18px 56px;
+      }
+
+      .wrap {
+        max-width: 1040px;
+        margin: 0 auto;
+      }
+
+      .hero {
+        padding: 12px 4px 22px;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent-2);
+        margin-bottom: 10px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(34px, 6vw, 64px);
+        line-height: 0.95;
+      }
+
+      .lead {
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.7;
+        margin-top: 16px;
+      }
+
+      .panel {
+        background: var(--panel);
+        backdrop-filter: blur(14px);
+        border: 1px solid var(--line);
+        border-radius: 26px;
+        box-shadow: 0 20px 60px rgba(78, 53, 28, 0.14);
+        overflow: hidden;
+      }
+
+      .panel + .panel {
+        margin-top: 22px;
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        padding: 24px 24px 10px;
+      }
+
+      .panel-head h2 {
+        margin: 0;
+        font-size: 24px;
+      }
+
+      .status {
+        padding: 9px 14px;
+        border-radius: 999px;
+        background: #f4eadf;
+        color: var(--accent-2);
+        font-size: 13px;
+      }
+
+      form {
+        padding: 10px 24px 24px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .field {
+        background: rgba(255, 255, 255, 0.68);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+      }
+
+      .field label {
+        display: block;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+        margin-bottom: 12px;
+      }
+
+      input[type="file"],
+      input[type="text"] {
+        width: 100%;
+        font: inherit;
+      }
+
+      input[type="text"] {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: white;
+      }
+
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--accent-2);
+        font-weight: 700;
+        margin-top: 10px;
+      }
+
+      .checkbox-row input {
+        width: 18px;
+        height: 18px;
+      }
+
+      .time-list {
+        display: grid;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .time-row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+      }
+
+      .time-row .field {
+        flex: 1;
+        margin: 0;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 14px 22px;
+        font: inherit;
+        font-weight: 700;
+        background: linear-gradient(135deg, #da6f39 0%, #bb4c22 100%);
+        color: white;
+        cursor: pointer;
+        box-shadow: 0 14px 30px rgba(203, 95, 44, 0.26);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+
+      .ghost-button {
+        appearance: none;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 12px 16px;
+        font: inherit;
+        font-weight: 700;
+        background: rgba(255, 255, 255, 0.85);
+        color: var(--accent-2);
+        cursor: pointer;
+        box-shadow: none;
+      }
+
+      .ghost-button.remove {
+        color: var(--danger);
+      }
+
+      .note {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .alert {
+        margin: 0 24px 20px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: rgba(255, 242, 231, 0.95);
+        border: 1px solid rgba(203, 95, 44, 0.22);
+        color: #7c3d1f;
+        line-height: 1.6;
+      }
+
+      .result {
+        margin-top: 24px;
+        padding: 20px 24px 26px;
+        border-top: 1px solid var(--line);
+      }
+
+      .result a {
+        color: var(--accent-2);
+        font-weight: 700;
+      }
+
+      .progress-card,
+      .video-wrap,
+      .preset-list {
+        margin-top: 14px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 16px;
+      }
+
+      .progress-title {
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 12px;
+        background: #eadfd2;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        width: 0%;
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #da6f39 0%, #bb4c22 100%);
+        transition: width 0.25s ease;
+      }
+
+      .progress-note {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+        margin-top: 10px;
+      }
+
+      .preset-item {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .preset-item:last-child {
+        border-bottom: 0;
+      }
+
+      .preset-name {
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .preset-value {
+        color: var(--accent-2);
+        font-size: 14px;
+        word-break: break-word;
+      }
+
+      .preset-meta {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 3px;
+      }
+
+      video {
+        width: 100%;
+        border-radius: 12px;
+        background: black;
+      }
+
+      details {
+        margin-top: 16px;
+      }
+
+      summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: var(--accent-2);
+      }
+
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #1f1b18;
+        color: #f7efe7;
+        border-radius: 18px;
+        padding: 16px;
+        max-height: 320px;
+        overflow: auto;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      @media (max-width: 760px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .panel-head {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .actions,
+        .time-row {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="hero">
+        <div class="eyebrow">Browser Only / Free</div>
+        <h1>ビデオポッドキャスト作成ツール</h1>
+        <p class="lead">
+          サーバーを使わず、このブラウザだけで動画を1本にまとめます。
+          収録動画にBGMを重ねて、必要ならジングルを差し込み、最終的にMP4を書き出します。
+        </p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>作成する</h2>
+          <div class="status" id="statusBadge">準備中...</div>
+        </div>
+        <div class="alert">
+          無料版はPC推奨です。処理はこの端末で行われるため、長い動画は時間がかかります。
+          出力は無料版向けに720pです。
+        </div>
+
+        <form id="buildForm">
+          <div class="grid">
+            <div class="field">
+              <label for="mainVideo">本編動画</label>
+              <div class="hint">収録した動画を選んでください。</div>
+              <input id="mainVideo" name="mainVideo" type="file" accept="video/*" required>
+            </div>
+
+            <div class="field">
+              <label for="outputName">出力ファイル名</label>
+              <div class="hint">最後に保存するMP4の名前です。</div>
+              <input id="outputName" name="outputName" type="text" value="podcast_episode.mp4">
+            </div>
+
+            <div class="field">
+              <label for="bgm">今回だけ別のBGM</label>
+              <div class="hint" id="bgmHint">選ばない場合は保存済みの標準BGMを使います。</div>
+              <input id="bgm" name="bgm" type="file" accept="audio/*">
+            </div>
+
+            <div class="field">
+              <label for="introImage">今回だけ別のイントロ画像</label>
+              <div class="hint" id="introHint">選ばない場合は保存済みの標準画像を使います。</div>
+              <input id="introImage" name="introImage" type="file" accept="image/*">
+            </div>
+
+            <div class="field">
+              <label for="jingle">今回だけ別のジングル音源</label>
+              <div class="hint" id="jingleHint">選ばない場合は保存済みの標準ジングルを使います。</div>
+              <input id="jingle" name="jingle" type="file" accept="audio/*">
+            </div>
+
+            <div class="field">
+              <label for="jingleImage">今回だけ別のジングル画像</label>
+              <div class="hint" id="jingleImageHint">選ばない場合は保存済みの標準画像を使います。</div>
+              <input id="jingleImage" name="jingleImage" type="file" accept="image/*">
+            </div>
+
+            <div class="field" style="grid-column: 1 / -1;">
+              <label>ジングル位置</label>
+              <div class="hint">標準は2個ですが、追加もできます。使わない場合はチェックを入れてください。</div>
+              <label class="checkbox-row">
+                <input id="disableJingles" type="checkbox">
+                <span>今回はジングルを使わない</span>
+              </label>
+              <div class="time-list" id="insertTimesList"></div>
+              <div class="actions" style="margin-top: 14px;">
+                <button class="ghost-button" id="addInsertTimeButton" type="button">ジングル位置を追加</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="buildButton" type="submit">MP4を作成する</button>
+            <div class="note">処理中はこのページを閉じないでください。</div>
+          </div>
+        </form>
+
+        <div class="result hidden" id="result">
+          <p id="resultMessage"></p>
+          <p id="resultLinkWrap" class="hidden">
+            <a id="resultLink" href="#" download>完成動画を保存する</a>
+          </p>
+
+          <div id="progressWrap" class="progress-card hidden">
+            <div class="progress-title" id="progressTitle">準備中...</div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-note" id="progressNote">初回だけ変換エンジンの読み込みに少し時間がかかります。</div>
+          </div>
+
+          <div id="previewWrap" class="video-wrap hidden">
+            <video id="previewVideo" controls playsinline></video>
+          </div>
+
+          <details id="logDetails">
+            <summary>詳細ログを見る</summary>
+            <pre id="logBox"></pre>
+          </details>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>標準素材</h2>
+          <div class="status" id="presetBadge">未設定</div>
+        </div>
+
+        <div class="preset-list">
+          <div class="preset-item">
+            <div class="preset-name">標準BGM</div>
+            <div class="preset-value" id="currentBgm">未設定</div>
+            <div class="preset-meta" id="currentBgmMeta"></div>
+          </div>
+          <div class="preset-item">
+            <div class="preset-name">標準ジングル音源</div>
+            <div class="preset-value" id="currentJingle">未設定</div>
+            <div class="preset-meta" id="currentJingleMeta"></div>
+          </div>
+          <div class="preset-item">
+            <div class="preset-name">標準イントロ画像</div>
+            <div class="preset-value" id="currentIntro">未設定</div>
+            <div class="preset-meta" id="currentIntroMeta"></div>
+          </div>
+          <div class="preset-item">
+            <div class="preset-name">標準ジングル画像</div>
+            <div class="preset-value" id="currentJingleImage">未設定</div>
+            <div class="preset-meta" id="currentJingleImageMeta"></div>
+          </div>
+        </div>
+
+        <form id="presetForm">
+          <div class="grid">
+            <div class="field">
+              <label for="presetBgm">標準BGMを保存</label>
+              <div class="hint">次回から自動で使うBGMです。</div>
+              <input id="presetBgm" name="bgm" type="file" accept="audio/*">
+            </div>
+
+            <div class="field">
+              <label for="presetJingle">標準ジングル音源を保存</label>
+              <div class="hint">次回から自動で使うジングル音源です。</div>
+              <input id="presetJingle" name="jingle" type="file" accept="audio/*">
+            </div>
+
+            <div class="field">
+              <label for="presetIntroImage">標準イントロ画像を保存</label>
+              <div class="hint">次回から自動で使うイントロ画像です。</div>
+              <input id="presetIntroImage" name="introImage" type="file" accept="image/*">
+            </div>
+
+            <div class="field">
+              <label for="presetJingleImage">標準ジングル画像を保存</label>
+              <div class="hint">次回から自動で使うジングル画像です。</div>
+              <input id="presetJingleImage" name="jingleImage" type="file" accept="image/*">
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="presetButton" type="submit">標準素材を保存する</button>
+            <div class="note" id="presetNote">保存先はこのブラウザの中です。</div>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -59,6 +59,28 @@ h1 {
   line-height: 1.7;
 }
 
+.hero-links {
+  margin: 18px 0 0;
+}
+
+.tool-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--accent-dark);
+  color: #fff9f2;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.tool-link:hover {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
+
 .status-card,
 .controls,
 .preview-panel {
