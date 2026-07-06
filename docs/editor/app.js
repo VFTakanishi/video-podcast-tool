@@ -561,6 +561,14 @@ async function execStage(runtime, stage, args) {
   await runtime.ffmpeg.exec(args);
 }
 
+async function ensureGeneratedFile(ffmpeg, path, label) {
+  try {
+    await ffmpeg.readFile(path);
+  } catch (error) {
+    throw new Error(`${label}の作成に失敗しました。処理ログを確認してください。`);
+  }
+}
+
 async function buildMainSegment(runtime, options) {
   const {
     mainPath,
@@ -588,9 +596,9 @@ async function buildMainSegment(runtime, options) {
     audioFilters.push(`atrim=${trimArgs.join(":")}`, "asetpts=PTS-STARTPTS");
   }
 
-  const mainVideoChain = videoFilters.length
-    ? `[0:v]${videoFilters.join(",")}[vout]`
-    : "[0:v]setpts=PTS-STARTPTS[vout]";
+  const scaledVideoChain = videoFilters.length
+    ? `[0:v]${videoFilters.join(",")},${scalePad}[vout]`
+    : `[0:v]setpts=PTS-STARTPTS,${scalePad}[vout]`;
   const mainAudioChain = audioFilters.length
     ? `[0:a]${audioFilters.join(",")},aformat=sample_rates=48000:channel_layouts=stereo[main]`
     : "[0:a]aformat=sample_rates=48000:channel_layouts=stereo[main]";
@@ -604,10 +612,9 @@ async function buildMainSegment(runtime, options) {
     "-stream_loop", "-1",
     "-i", bgmPath,
     "-filter_complex",
-    `${mainVideoChain};${mainAudioChain};${bgmChain};${mixChain}`,
+    `${scaledVideoChain};${mainAudioChain};${bgmChain};${mixChain}`,
     "-map", "[vout]",
     "-map", "[aout]",
-    "-vf", scalePad,
     "-c:v", "libx264",
     "-preset", "ultrafast",
     "-threads", "1",
@@ -622,6 +629,7 @@ async function buildMainSegment(runtime, options) {
   );
 
   await execStage(runtime, stage, args);
+  await ensureGeneratedFile(runtime.ffmpeg, outputPath, "本編動画");
 }
 
 async function concatClips(runtime, options) {
@@ -657,6 +665,7 @@ async function concatClips(runtime, options) {
   );
 
   await execStage(runtime, stage, args);
+  await ensureGeneratedFile(runtime.ffmpeg, outputPath, "結合動画");
 }
 
 async function splitRenderedSegment(runtime, options) {
@@ -686,6 +695,7 @@ async function splitRenderedSegment(runtime, options) {
   ];
 
   await execStage(runtime, stage, args);
+  await ensureGeneratedFile(runtime.ffmpeg, outputPath, "分割動画");
 }
 
 async function buildPodcast(files, defaults) {
