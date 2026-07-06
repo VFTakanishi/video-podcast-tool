@@ -624,6 +624,41 @@ async function buildMainSegment(runtime, options) {
   await execStage(runtime, stage, args);
 }
 
+async function concatClips(runtime, options) {
+  const { clips, outputPath, stage } = options;
+  if (!Array.isArray(clips) || clips.length === 0) {
+    throw new Error("結合する動画がありません。");
+  }
+
+  const args = ["-y"];
+  const filterInputs = [];
+
+  clips.forEach((clipPath, index) => {
+    args.push("-i", clipPath);
+    filterInputs.push(`[${index}:v:0][${index}:a:0]`);
+  });
+
+  args.push(
+    "-filter_complex",
+    `${filterInputs.join("")}concat=n=${clips.length}:v=1:a=1[v][a]`,
+    "-map", "[v]",
+    "-map", "[a]",
+    "-c:v", "libx264",
+    "-preset", "ultrafast",
+    "-threads", "1",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-pix_fmt", "yuv420p",
+    "-r", "30",
+    "-ar", "48000",
+    "-ac", "2",
+    "-movflags", "+faststart",
+    outputPath
+  );
+
+  await execStage(runtime, stage, args);
+}
+
 async function buildPodcast(files, defaults) {
   const runtime = await ensureFfmpeg();
   const runId = `job_${Date.now()}_${++buildCounter}`;
@@ -650,7 +685,6 @@ async function buildPodcast(files, defaults) {
   const jinglePath = useJingles ? buildVirtualName(`${runId}_jingle`, jingle) : "";
   const jingleImagePath = useJingles ? buildVirtualName(`${runId}_jingle_image`, jingleImage) : "";
   const jingleOut = `${runId}_jingle.mp4`;
-  const concatListPath = `${runId}_concat.txt`;
   const finalPath = `${runId}_${outputName}`;
 
   await writeBlob(runtime.ffmpeg, mainPath, mainVideo);
@@ -808,23 +842,16 @@ async function buildPodcast(files, defaults) {
     }
   }
 
-  const concatBody = clips.map((clip) => `file '${clip}'`).join("\n");
-  await runtime.ffmpeg.writeFile(concatListPath, new TextEncoder().encode(`${concatBody}\n`));
-
-  await execStage(runtime, {
-    title: "最後に1本へまとめています...",
-    start: 90,
-    end: 100,
-    note: "書き出し用のMP4を作成しています。"
-  }, [
-    "-y",
-    "-f", "concat",
-    "-safe", "0",
-    "-i", concatListPath,
-    "-c", "copy",
-    "-movflags", "+faststart",
-    finalPath
-  ]);
+  await concatClips(runtime, {
+    clips,
+    outputPath: finalPath,
+    stage: {
+      title: "Finalizing video...",
+      start: 90,
+      end: 100,
+      note: "Joining intro, main parts, and jingles into one MP4."
+    }
+  });
 
   return { data: await runtime.ffmpeg.readFile(finalPath), outputName };
 }
