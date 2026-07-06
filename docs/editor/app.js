@@ -659,6 +659,35 @@ async function concatClips(runtime, options) {
   await execStage(runtime, stage, args);
 }
 
+async function splitRenderedSegment(runtime, options) {
+  const {
+    inputPath,
+    outputPath,
+    start,
+    duration,
+    stage
+  } = options;
+
+  const args = [
+    "-y",
+    "-i", inputPath,
+    "-ss", secondsToTimestamp(Math.max(0, start)),
+    "-t", secondsToTimestamp(Math.max(0, duration)),
+    "-c:v", "libx264",
+    "-preset", "ultrafast",
+    "-threads", "1",
+    "-c:a", "aac",
+    "-b:a", "128k",
+    "-pix_fmt", "yuv420p",
+    "-r", "30",
+    "-ar", "48000",
+    "-ac", "2",
+    outputPath
+  ];
+
+  await execStage(runtime, stage, args);
+}
+
 async function buildPodcast(files, defaults) {
   const runtime = await ensureFfmpeg();
   const runId = `job_${Date.now()}_${++buildCounter}`;
@@ -724,14 +753,27 @@ async function buildPodcast(files, defaults) {
     introOut
   ]);
 
+  await buildMainSegment(runtime, {
+    mainPath,
+    bgmPath,
+    scalePad,
+    outputPath: mainOut,
+    stage: {
+      title: "Main video with BGM...",
+      start: 16,
+      end: useJingles ? 58 : 84,
+      note: "Rendering the full main video first."
+    }
+  });
+
   const clips = [introOut];
 
   if (useJingles) {
     await execStage(runtime, {
-      title: "ジングルを作成中...",
-      start: 16,
-      end: 24,
-      note: "ジングル画像と音声を組み合わせています。"
+      title: "Building jingle...",
+      start: 58,
+      end: 66,
+      note: "Combining the jingle image and sound."
     }, [
       "-y",
       "-loop", "1",
@@ -756,92 +798,38 @@ async function buildPodcast(files, defaults) {
     ]);
 
     const boundaries = [0, ...insertTimes.sort((a, b) => a - b), mainDuration];
-    const segmentJobs = [];
+    const segmentCount = boundaries.length - 1;
 
-    for (let i = 0; i < boundaries.length - 1; i += 1) {
-      const start = boundaries[i];
-      const end = boundaries[i + 1];
-      let cursor = start;
-
-      while (cursor < end - 0.001) {
-        const nextEnd = Math.min(end, cursor + DIRECT_SEGMENT_LIMIT_SECONDS);
-        const duration = Math.max(0, nextEnd - cursor);
-        if (duration <= 0.001) {
-          break;
-        }
-        segmentJobs.push({
-          segmentPath: `${runId}_segment_${String(segmentJobs.length + 1).padStart(2, "0")}.mp4`,
-          start: cursor,
-          duration,
-          insertJingleAfter: false
-        });
-        cursor = nextEnd;
+    for (let i = 0; i < segmentCount; i += 1) {
+      const startSeconds = boundaries[i];
+      const endSeconds = boundaries[i + 1];
+      const durationSeconds = Math.max(0, endSeconds - startSeconds);
+      if (durationSeconds <= 0.001) {
+        continue;
       }
 
-      if (i < boundaries.length - 2 && segmentJobs.length) {
-        segmentJobs[segmentJobs.length - 1].insertJingleAfter = true;
-      }
-    }
-
-    for (let i = 0; i < segmentJobs.length; i += 1) {
-      const job = segmentJobs[i];
-      await buildMainSegment(runtime, {
-        mainPath,
-        bgmPath,
-        scalePad,
-        outputPath: job.segmentPath,
-        start: job.start,
-        duration: job.duration,
+      const segmentPath = `${runId}_segment_${String(i + 1).padStart(2, "0")}.mp4`;
+      await splitRenderedSegment(runtime, {
+        inputPath: mainOut,
+        outputPath: segmentPath,
+        start: startSeconds,
+        duration: durationSeconds,
         stage: {
-          title: `本編を作成中... (${i + 1}/${segmentJobs.length})`,
-          start: 24 + (66 / Math.max(1, segmentJobs.length)) * i,
-          end: 24 + (66 / Math.max(1, segmentJobs.length)) * (i + 1),
-          note: "本編を少しずつ処理しています。"
+          title: `Splitting main video... (${i + 1}/${segmentCount})`,
+          start: 66 + (20 / Math.max(1, segmentCount)) * i,
+          end: 66 + (20 / Math.max(1, segmentCount)) * (i + 1),
+          note: "Cutting the main video at each jingle point."
         }
       });
-      clips.push(job.segmentPath);
-      if (job.insertJingleAfter) {
+
+      clips.push(segmentPath);
+      if (i < segmentCount - 1) {
         clips.push(jingleOut);
       }
     }
-  } else if (mainDuration <= DIRECT_SEGMENT_LIMIT_SECONDS) {
-    await buildMainSegment(runtime, {
-      mainPath,
-      bgmPath,
-      scalePad,
-      outputPath: mainOut,
-      stage: {
-        title: "本編にBGMを重ねています...",
-        start: 16,
-        end: 90,
-        note: "本編をまとめて処理しています。"
-      }
-    });
-    clips.push(mainOut);
   } else {
-    const segmentCount = Math.ceil(mainDuration / DIRECT_SEGMENT_LIMIT_SECONDS);
-    for (let i = 0; i < segmentCount; i += 1) {
-      const start = i * DIRECT_SEGMENT_LIMIT_SECONDS;
-      const duration = Math.min(DIRECT_SEGMENT_LIMIT_SECONDS, mainDuration - start);
-      const segmentPath = `${runId}_segment_${String(i + 1).padStart(2, "0")}.mp4`;
-      await buildMainSegment(runtime, {
-        mainPath,
-        bgmPath,
-        scalePad,
-        outputPath: segmentPath,
-        start,
-        duration,
-        stage: {
-          title: `本編にBGMを重ねています... (${i + 1}/${segmentCount})`,
-          start: 16 + (74 / segmentCount) * i,
-          end: 16 + (74 / segmentCount) * (i + 1),
-          note: "長い動画なので分けて処理しています。"
-        }
-      });
-      clips.push(segmentPath);
-    }
+    clips.push(mainOut);
   }
-
   await concatClips(runtime, {
     clips,
     outputPath: finalPath,
