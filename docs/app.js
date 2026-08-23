@@ -33,6 +33,7 @@ const TEXT = {
   recordFailed: "\u9332\u753b\u3092\u958b\u59cb\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f",
   recordStopped: "\u9332\u753b\u505c\u6b62\u3002\u4fdd\u5b58\u3067\u304d\u307e\u3059",
   savePreparing: "MP4\u4fdd\u5b58\u306e\u6e96\u5099\u3092\u3057\u3066\u3044\u307e\u3059",
+  saveOptimizing: "Windows\u30d7\u30ec\u30a4\u30e4\u30fc\u7528\u306bMP4\u3092\u6700\u9069\u5316\u3057\u3066\u3044\u307e\u3059",
   saving: "\u4fdd\u5b58\u30d5\u30a1\u30a4\u30eb\u3092\u6e96\u5099\u3057\u3066\u3044\u307e\u3059",
   saveDone: "\u4fdd\u5b58\u3057\u307e\u3057\u305f",
   saveFailed: "\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f",
@@ -536,7 +537,8 @@ async function startRecording() {
       setButtons();
     };
 
-    state.recorder.start(1000);
+    // The final file is normalized on save. Avoid emitting live fragments here.
+    state.recorder.start();
     startRecordingTimer();
     setStatus(TEXT.recording);
     setButtons();
@@ -640,42 +642,53 @@ async function saveRecording() {
     setStatus(TEXT.saving);
     elements.saveButton.disabled = true;
 
-    if (state.recordedMimeType.includes("mp4")) {
-      const savedMp4 = await saveViaFilePicker(state.recordedBlob, "mp4").catch(() => false);
-      if (!savedMp4) {
-        triggerDownload(state.recordedBlob, "mp4");
-      }
-      setStatus(TEXT.saveDone);
-      return;
+    const { ffmpeg, util } = await ensureFfmpeg();
+    const isMp4Input = state.recordedMimeType.includes("mp4");
+    const inputName = isMp4Input ? "input.mp4" : "input.webm";
+    const outputName = "podcast-recording.mp4";
+    await ffmpeg.writeFile(inputName, await util.fetchFile(state.recordedBlob));
+
+    setStatus(isMp4Input ? TEXT.saveOptimizing : TEXT.saving);
+    if (isMp4Input) {
+      // MediaRecorder MP4 can be fragmented and omit a final seek index. Remuxing
+      // creates a normal MP4 with a complete moov atom without re-encoding.
+      await ffmpeg.exec([
+        "-y",
+        "-i", inputName,
+        "-map", "0:v:0",
+        "-map", "0:a:0?",
+        "-c", "copy",
+        "-movflags", "+faststart",
+        outputName,
+      ]);
+    } else {
+      await ffmpeg.exec([
+        "-y",
+        "-i", inputName,
+        "-map", "0:v:0",
+        "-map", "0:a:0?",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-ar", "48000",
+        "-ac", "2",
+        "-shortest",
+        "-movflags", "+faststart",
+        outputName,
+      ]);
     }
 
-    const { ffmpeg, util } = await ensureFfmpeg();
-    await ffmpeg.writeFile("input.webm", await util.fetchFile(state.recordedBlob));
-    await ffmpeg.exec([
-      "-y",
-      "-i", "input.webm",
-      "-map", "0:v:0",
-      "-map", "0:a:0?",
-      "-c:v", "libx264",
-      "-preset", "veryfast",
-      "-pix_fmt", "yuv420p",
-      "-c:a", "aac",
-      "-b:a", "192k",
-      "-ar", "48000",
-      "-ac", "2",
-      "-shortest",
-      "podcast-recording.mp4",
-    ]);
-
-    const data = await ffmpeg.readFile("podcast-recording.mp4");
+    const data = await ffmpeg.readFile(outputName);
     const blob = new Blob([data], { type: "video/mp4" });
     const savedConverted = await saveViaFilePicker(blob, "mp4").catch(() => false);
     if (!savedConverted) {
       triggerDownload(blob, "mp4");
     }
 
-    await ffmpeg.deleteFile("input.webm").catch(() => {});
-    await ffmpeg.deleteFile("podcast-recording.mp4").catch(() => {});
+    await ffmpeg.deleteFile(inputName).catch(() => {});
+    await ffmpeg.deleteFile(outputName).catch(() => {});
     setStatus(TEXT.saveDone);
   } catch (error) {
     console.error(error);
@@ -746,3 +759,4 @@ populateMicrophoneDevices().catch(() => {});
 navigator.mediaDevices?.addEventListener?.("devicechange", () => {
   populateMicrophoneDevices().catch(() => {});
 });
+
