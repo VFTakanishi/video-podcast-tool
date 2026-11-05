@@ -10,35 +10,41 @@
   <main class="app-shell">
     <section class="hero">
       <div>
-        <p class="eyebrow">ブラウザ収録ツール</p>
-        <h1>ビデオポッドキャスト収録</h1>
+        <p class="eyebrow">◈ FIELD STATION / VF-01</p>
+        <h1>MISSION CONTROL<span>ビデオポッドキャスト収録</span></h1>
         <p class="lead">
-          録画、停止、MP4保存、画面共有、背景そのまま、背景ぼかし、画像背景に対応した
-          シンプルな日本語アプリです。
+          あなたの声を、次のミッションへ。<br>収録・一時停止・再開から、MP4保存まで。
         </p>
         <p class="hero-links">
           <a class="tool-link" href="./editor/">編集ツールを開く</a>
         </p>
       </div>
       <div class="status-card">
-        <p class="status-label">状態</p>
-        <p id="statusText" class="status-text">開始準備中</p>
+        <p class="status-label">● SYSTEM STATUS</p>
+        <p id="statusText" class="status-text" role="status">開始準備中</p>
       </div>
     </section>
 
     <section class="studio">
-      <div class="preview-panel">
+      <div class="monitor-column"><div class="monitor-heading"><span>01 / LIVE MONITOR</span><span>HD 1280 × 720</span></div><div class="preview-panel">
+        <div class="standby-label" aria-hidden="true">VF / SECURE STUDIO</div>
         <canvas id="previewCanvas" width="1280" height="720" aria-label="収録プレビュー"></canvas>
         <div class="preview-badge" id="recordingBadge" hidden>録画中 00:00</div>
       </div>
 
+      <section class="take-panel" aria-labelledby="takesTitle">
+        <div class="monitor-heading"><h2 id="takesTitle">02 / 収録履歴</h2><span id="takeCount">0 TAKES</span></div>
+        <label class="field"><span>保存する収録を選択</span><select id="takeSelect" aria-label="保存する収録"></select></label>
+        <p class="hint">新しく収録しても、前の映像はこの一覧に残ります。<br>履歴はこのタブを開いている間のみ保持されます。閉じる前に必要な映像を保存してください。</p>
+      </section></div>
       <aside class="controls">
         <div class="control-group">
-          <h2>基本操作</h2>
+          <h2>REC / 収録操作</h2>
           <button id="setupButton" class="primary">カメラとマイクを開始</button>
-          <button id="recordButton">録画</button>
-          <button id="stopButton" disabled>停止</button>
-          <button id="saveButton" disabled>保存</button>
+          <button id="recordButton" class="record-action">● 新しい収録を開始</button>
+          <div class="transport"><button id="pauseButton" disabled>Ⅱ 一時停止</button>
+          <button id="stopButton" disabled>■ 収録を終了</button></div>
+          <button id="saveButton" disabled>↓ 選択した収録を保存</button>
         </div>
 
         <div class="control-group">

@@ -6,6 +6,9 @@ const elements = {
   screenVideo: document.getElementById("screenVideo"),
   setupButton: document.getElementById("setupButton"),
   recordButton: document.getElementById("recordButton"),
+  pauseButton: document.getElementById("pauseButton"),
+  takeSelect: document.getElementById("takeSelect"),
+  takeCount: document.getElementById("takeCount"),
   stopButton: document.getElementById("stopButton"),
   saveButton: document.getElementById("saveButton"),
   shareButton: document.getElementById("shareButton"),
@@ -53,6 +56,11 @@ const state = {
   microphoneStream: null,
   screenStream: null,
   recorder: null,
+  busy: false,
+  saving: false,
+  takes: [],
+  pausedAt: 0,
+  pausedDuration: 0,
   recordedChunks: [],
   recordedBlob: null,
   recordedMimeType: "",
@@ -75,12 +83,15 @@ function setStatus(message) {
 
 function setButtons() {
   const hasCamera = Boolean(state.cameraStream);
-  const isRecording = state.recorder?.state === "recording";
-  const hasRecording = Boolean(state.recordedBlob);
-
-  elements.recordButton.disabled = !hasCamera || isRecording;
-  elements.stopButton.disabled = !isRecording;
-  elements.saveButton.disabled = !hasRecording || isRecording;
+  const active = Boolean(state.recorder && state.recorder.state !== "inactive");
+  const paused = state.recorder?.state === "paused";
+  elements.recordButton.disabled = !hasCamera || active || state.busy || state.saving;
+  elements.pauseButton.disabled = !active || state.busy;
+  elements.pauseButton.textContent = paused ? "▶ 収録を再開" : "Ⅱ 一時停止";
+  elements.stopButton.disabled = !active || state.busy;
+  elements.saveButton.disabled = !state.recordedBlob || active || state.busy || state.saving;
+  elements.takeSelect.disabled = active || state.busy || state.saving;
+  elements.microphoneSelect.disabled = active || state.busy;
   elements.shareButton.disabled = !hasCamera;
   elements.shareButton.textContent = state.screenStream ? TEXT.shareStopButton : TEXT.shareStartButton;
 }
@@ -93,11 +104,14 @@ function formatElapsedTime(ms) {
 }
 
 function updateRecordingBadge() {
-  const elapsed = Date.now() - state.recordingStartedAt;
-  elements.recordingBadge.textContent = `\u9332\u753b\u4e2d ${formatElapsedTime(elapsed)}`;
+  const elapsed = (state.pausedAt || Date.now()) - state.recordingStartedAt - state.pausedDuration;
+  elements.recordingBadge.dataset.paused = String(Boolean(state.pausedAt));
+  elements.recordingBadge.textContent = `\u9332\u753b\u4e2d ${formatElapsedTime(elapsed)}${state.pausedAt ? " / 一時停止中" : ""}`;
 }
 
 function startRecordingTimer() {
+  state.pausedAt = 0;
+  state.pausedDuration = 0;
   state.recordingStartedAt = Date.now();
   updateRecordingBadge();
   elements.recordingBadge.hidden = false;
@@ -166,8 +180,6 @@ async function setupMedia() {
     elements.cameraVideo.srcObject = state.cameraStream;
     await elements.cameraVideo.play();
 
-    state.recordedBlob = null;
-    state.recordedMimeType = "";
     await populateMicrophoneDevices();
     startRenderLoop();
     setStatus(TEXT.mediaReady);
@@ -206,7 +218,7 @@ async function populateMicrophoneDevices() {
 }
 
 async function switchMicrophone() {
-  if (!state.cameraStream || state.recorder?.state === "recording") {
+  if (!state.cameraStream || state.busy || (state.recorder && state.recorder.state !== "inactive")) {
     return;
   }
 
@@ -487,19 +499,59 @@ function buildRecorderOptions() {
   return options;
 }
 
+function selectTake(index) {
+  const take = state.takes[index];
+  if (!take) return;
+  state.recordedBlob = take.blob;
+  state.recordedMimeType = take.mimeType;
+  elements.takeSelect.value = String(index);
+  setButtons();
+}
+
+function addTake(blob, mimeType) {
+  if (!blob.size) return;
+  const index = state.takes.length;
+  state.takes.push({ blob, mimeType });
+  const option = document.createElement("option");
+  option.value = String(index);
+  option.textContent = `TAKE ${String(index + 1).padStart(2, "0")} · ${new Date().toLocaleTimeString("ja-JP")} · ${(blob.size / 1024 / 1024).toFixed(1)} MB`;
+  elements.takeSelect.appendChild(option);
+  elements.takeCount.textContent = `${state.takes.length} TAKES`;
+  selectTake(index);
+}
+
+function togglePause() {
+  if (state.busy) return;
+  if (state.recorder?.state === "recording") {
+    state.recorder.pause();
+    state.pausedAt = Date.now();
+    setStatus("一時停止中 — 再開すると同じ動画につながります");
+  } else if (state.recorder?.state === "paused") {
+    state.recorder.resume();
+    state.pausedDuration += Date.now() - state.pausedAt;
+    state.pausedAt = 0;
+    setStatus(TEXT.recording);
+  }
+  updateRecordingBadge();
+  setButtons();
+}
+
 async function startRecording() {
+  if (state.busy || state.saving || (state.recorder && state.recorder.state !== "inactive")) return;
+  state.busy = true;
+  setButtons();
   if (!state.cameraStream) {
     await setupMedia();
   }
 
   if (!state.cameraStream) {
+    state.busy = false;
+    setButtons();
     return;
   }
 
   try {
     state.recordedChunks = [];
-    state.recordedBlob = null;
-    state.recordedMimeType = "";
     elements.saveButton.disabled = true;
 
     const canvasStream = elements.previewCanvas.captureStream(30);
@@ -512,7 +564,7 @@ async function startRecording() {
 
     const recorderOptions = buildRecorderOptions();
     state.recorder = new MediaRecorder(outputStream, recorderOptions);
-    state.recordedMimeType = recorderOptions.mimeType || "video/webm";
+    const recordingMimeType = recorderOptions.mimeType || "video/webm";
 
     state.recorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
@@ -521,24 +573,27 @@ async function startRecording() {
     };
 
     state.recorder.onstop = async () => {
-      const mimeType = state.recordedChunks[0]?.type || state.recordedMimeType || "video/webm";
-      state.recordedMimeType = mimeType;
-      state.recordedBlob = new Blob(state.recordedChunks, { type: mimeType });
+      const mimeType = state.recordedChunks[0]?.type || recordingMimeType;
+      addTake(new Blob(state.recordedChunks, { type: mimeType }), mimeType);
+      state.recordedChunks = [];
       stopRecordingTimer();
       elements.recordingBadge.hidden = true;
+      state.canvasCaptureTrack?.stop();
       state.canvasCaptureTrack = null;
 
       if (state.mixedAudioContext) {
-        await state.mixedAudioContext.close();
+        await state.mixedAudioContext.close().catch(() => {});
         state.mixedAudioContext = null;
       }
 
+      state.busy = false;
       setStatus(TEXT.recordStopped);
       setButtons();
     };
 
     // The final file is normalized on save. Avoid emitting live fragments here.
     state.recorder.start();
+    state.busy = false;
     startRecordingTimer();
     setStatus(TEXT.recording);
     setButtons();
@@ -546,6 +601,7 @@ async function startRecording() {
     console.error(error);
     stopRecordingTimer();
     elements.recordingBadge.hidden = true;
+    state.canvasCaptureTrack?.stop();
     state.canvasCaptureTrack = null;
 
     if (state.mixedAudioContext) {
@@ -553,12 +609,16 @@ async function startRecording() {
       state.mixedAudioContext = null;
     }
 
+    state.busy = false;
+    setButtons();
     setStatus(TEXT.recordFailed);
   }
 }
 
 function stopRecording() {
-  if (state.recorder?.state === "recording") {
+  if (!state.busy && state.recorder && state.recorder.state !== "inactive") {
+    state.busy = true;
+    setButtons();
     state.recorder.stop();
   }
 }
@@ -634,10 +694,12 @@ async function saveOriginalRecording() {
 }
 
 async function saveRecording() {
-  if (!state.recordedBlob) {
+  if (!state.recordedBlob || state.saving || state.busy || (state.recorder && state.recorder.state !== "inactive")) {
     return;
   }
 
+  state.saving = true;
+  setButtons();
   try {
     setStatus(TEXT.saving);
     elements.saveButton.disabled = true;
@@ -695,6 +757,7 @@ async function saveRecording() {
     await saveOriginalRecording();
     setStatus("MP4保存に失敗したため、元の録画を保存しました");
   } finally {
+    state.saving = false;
     setButtons();
   }
 }
@@ -715,6 +778,14 @@ function loadBackgroundImage(file) {
 
 elements.setupButton.addEventListener("click", setupMedia);
 elements.recordButton.addEventListener("click", startRecording);
+elements.pauseButton.addEventListener("click", togglePause);
+elements.takeSelect.addEventListener("change", () => selectTake(Number(elements.takeSelect.value)));
+window.addEventListener("beforeunload", (event) => {
+  if (state.takes.length || state.busy || state.recorder?.state === "recording" || state.recorder?.state === "paused") {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+});
 elements.stopButton.addEventListener("click", stopRecording);
 elements.saveButton.addEventListener("click", saveRecording);
 elements.shareButton.addEventListener("click", toggleScreenShare);
